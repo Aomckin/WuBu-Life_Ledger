@@ -28,5 +28,7 @@ COPY --from=build /out/stockroom /app/stockroom
 USER 10001:10001
 EXPOSE 8080
 VOLUME ["/data"]
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=5 \
+  CMD ["/app/stockroom", "healthcheck", "http://127.0.0.1:8080/healthz"]
 
 ENTRYPOINT ["/app/stockroom"]
