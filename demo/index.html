@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Interactive browser-only Stockroom demo.">
+  <title>Stockroom demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Stockroom demo home">Stockroom <span>Demo</span></a>
+    <nav aria-label="Primary">
+      <a href="https://github.com/Timo348/Stockroom">GitHub</a>
+      <a href="https://hub.docker.com/r/timo348/stockroom">Docker Hub</a>
+    </nav>
+  </header>
+
+  <main id="main" class="page-shell">
+    <section class="hero" id="top" aria-labelledby="demo-title">
+      <p class="eyebrow">Interactive browser demo</p>
+      <h1 id="demo-title">Know what is at home.</h1>
+      <p class="hero-copy">Explore Stockroom inventory and its safe AI-inbox flow. Demo data stays only in this browser; no files, accounts, AI model, or server are used.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="https://github.com/Timo348/Stockroom#run-with-docker">Run with Docker</a>
+        <button class="button subtle" id="reset-demo" type="button">Reset demo data</button>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="Inventory summary">
+      <article><span>Items tracked</span><strong id="item-count">0</strong></article>
+      <article><span>Low stock</span><strong id="low-count">0</strong></article>
+      <article><span>Ready changes</span><strong id="ready-count">0</strong></article>
+    </section>
+
+    <section class="notice" aria-label="Demo limitation">
+      <strong>Demo boundary</strong>
+      <span>Capture staging is deterministic UI simulation. Real image, PDF, audio, and local-AI analysis run only in Docker.</span>
+    </section>
+
+    <div class="workspace">
+      <section class="panel inventory-panel" aria-labelledby="inventory-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Inventory</p>
+            <h2 id="inventory-title">What is on hand</h2>
+          </div>
+          <div class="filters" aria-label="Inventory filter">
+            <button class="filter is-active" data-filter="all" type="button">All</button>
+            <button class="filter" data-filter="low" type="button">Low stock</button>
+          </div>
+        </div>
+        <div class="item-list" id="item-list" aria-live="polite"></div>
+
+        <form class="add-form" id="add-item-form">
+          <h3>Add a demo item</h3>
+          <div class="field-grid">
+            <label>Name<input id="item-name" name="name" maxlength="80" required placeholder="e.g. Oat milk"></label>
+            <label>Amount<input id="item-amount" name="amount" type="number" min="0.1" step="0.1" value="1" required></label>
+            <label>Unit<input id="item-unit" name="unit" maxlength="24" value="item" required></label>
+            <label>Category
+              <select id="item-category" name="category">
+                <option value="Pantry">Pantry</option>
+                <option value="Drinks">Drinks</option>
+                <option value="Cleaning">Cleaning</option>
+                <option value="Bathroom">Bathroom</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+          </div>
+          <button class="button primary" type="submit">Add item</button>
+        </form>
+      </section>
+
+      <aside class="panel inbox-panel" aria-labelledby="inbox-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">AI inbox</p>
+            <h2 id="inbox-title">Review before applying</h2>
+          </div>
+          <span class="local-badge">Local only</span>
+        </div>
+
+        <form class="capture-form" id="capture-form">
+          <label for="capture-text">Describe a change</label>
+          <textarea id="capture-text" maxlength="160" rows="4" placeholder="Bought 2 cartons of oat milk"></textarea>
+          <p>Demo parser stages one suggestion. It never uploads or analyzes your text.</p>
+          <button class="button primary" type="submit">Stage demo analysis</button>
+        </form>
+
+        <section class="queue" aria-labelledby="ready-title">
+          <div class="queue-heading">
+            <h3 id="ready-title">Ready to apply</h3>
+            <span id="queue-status">No staged changes</span>
+          </div>
+          <div id="queue-card"></div>
+          <button class="button apply" id="apply-ready" type="button" hidden>Apply ready change</button>
+        </section>
+
+        <section class="review-note" aria-labelledby="review-title">
+          <h3 id="review-title">Needs review in full Stockroom</h3>
+          <p>Low confidence and inventory conflicts remain editable until you correct, apply, or discard them.</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

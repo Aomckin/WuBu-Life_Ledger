@@ -1,0 +1,16 @@
+services:
+  app:
+    environment:
+      AI_BASE_URL: ${AI_BASE_URL:-http://ollama:11434}
+      AI_MODEL: ${AI_MODEL:-qwen3-vl:8b-instruct}
+      AI_TIMEOUT: ${AI_TIMEOUT:-180s}
+      AI_TRANSCRIPTION_URL: ${AI_TRANSCRIPTION_URL:-http://whisper:8080/inference}
+      AI_TRANSCRIPTION_LANGUAGE: ${AI_TRANSCRIPTION_LANGUAGE:-de}
+    networks:
+      - default
+      - local-ai
+
+networks:
+  local-ai:
+    external: true
+    name: local-ai

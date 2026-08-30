@@ -1,0 +1,721 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stockroom API",
+    "version": "1.0.0",
+    "description": "REST API for a single-household inventory. No authentication is provided; deploy only on a trusted network."
+  },
+  "servers": [{ "url": "/" }],
+  "tags": [
+    { "name": "Inventory" },
+    { "name": "AI Intake" },
+    { "name": "System" }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Check application and database health",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Application and database are available",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+          },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/v1/meta": {
+      "get": {
+        "tags": ["Inventory"],
+        "summary": "Get supported categories and suggested values",
+        "operationId": "getMetadata",
+        "responses": {
+          "200": {
+            "description": "Inventory metadata",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Metadata" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/summary": {
+      "get": {
+        "tags": ["Inventory"],
+        "summary": "Get current stock summary",
+        "operationId": "getSummary",
+        "responses": {
+          "200": {
+            "description": "Current summary",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Summary" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/items": {
+      "get": {
+        "tags": ["Inventory"],
+        "summary": "List and filter inventory items",
+        "operationId": "listItems",
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string", "maxLength": 100 }, "description": "Case-insensitive name and notes search." },
+          { "name": "category", "in": "query", "schema": { "$ref": "#/components/schemas/Category" } },
+          { "name": "location", "in": "query", "schema": { "type": "string", "maxLength": 60 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["low", "out", "expiring", "expired", "short_lived"] } },
+          { "name": "hide_out", "in": "query", "schema": { "type": "boolean", "default": false }, "description": "Exclude zero-quantity items without changing inventory." },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered item page",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ItemList" } } }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "tags": ["Inventory"],
+        "summary": "Create an inventory item",
+        "operationId": "createItem",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ItemCreate" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Item created",
+            "headers": { "Location": { "schema": { "type": "string" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidJSON" },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/items/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/ItemID" }],
+      "get": {
+        "tags": ["Inventory"],
+        "summary": "Get one inventory item",
+        "operationId": "getItem",
+        "responses": {
+          "200": { "description": "Inventory item", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "patch": {
+        "tags": ["Inventory"],
+        "summary": "Update selected item fields",
+        "operationId": "updateItem",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ItemPatch" } } }
+        },
+        "responses": {
+          "200": { "description": "Updated item", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } } },
+          "400": { "$ref": "#/components/responses/InvalidJSON" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "delete": {
+        "tags": ["Inventory"],
+        "summary": "Delete an inventory item",
+        "operationId": "deleteItem",
+        "responses": {
+          "204": { "description": "Item deleted" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/items/{id}/adjust": {
+      "parameters": [{ "$ref": "#/components/parameters/ItemID" }],
+      "post": {
+        "tags": ["Inventory"],
+        "summary": "Atomically increase or decrease quantity",
+        "description": "Designed for UI controls and later automation. A decrease that would produce a negative quantity is rejected.",
+        "operationId": "adjustItemQuantity",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Adjustment" } } }
+        },
+        "responses": {
+          "200": { "description": "Adjusted item", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } } },
+          "400": { "$ref": "#/components/responses/InvalidJSON" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Adjustment would produce a negative quantity", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/intake": {
+      "get": {
+        "tags": ["AI Intake"],
+        "summary": "List staged AI intake entries",
+        "description": "Lists unprocessed inputs. This endpoint does not analyse files or modify inventory.",
+        "operationId": "listIntakeEntries",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/IntakeStatus" } },
+          { "name": "workflow_state", "in": "query", "schema": { "$ref": "#/components/schemas/IntakeWorkflowState" } },
+          { "name": "batch_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Intake page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeList" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "tags": ["AI Intake"],
+        "summary": "Stage text or one temporary media upload",
+        "description": "Stores one image, PDF, audio file, or short video for later processing. The file may be up to 100 MB, is deleted when marked reviewed, and expires after 24 hours.",
+        "operationId": "createIntakeEntry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/IntakeCommandCreate" } },
+            "multipart/form-data": { "schema": { "$ref": "#/components/schemas/IntakeMultipartCreate" } }
+          }
+        },
+        "responses": {
+          "201": { "description": "Input staged", "headers": { "Location": { "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeEntry" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "413": { "$ref": "#/components/responses/RequestTooLarge" },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/intake/batches": {
+      "post": {
+        "tags": ["AI Intake"],
+        "summary": "Stage a text capture or up to ten files as one AI inbox batch",
+        "description": "Each uploaded file becomes an independent inbox entry under one batch ID. A batch may contain at most 10 files and 250 MB total; each file remains limited to 100 MB.",
+        "operationId": "createIntakeBatch",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/IntakeBatchMultipartCreate" } } } },
+        "responses": {
+          "201": { "description": "Batch staged", "headers": { "Location": { "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBatch" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "413": { "$ref": "#/components/responses/RequestTooLarge" },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/intake/batches/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "get": {
+        "tags": ["AI Intake"], "summary": "Get entries grouped in one inbox batch", "operationId": "getIntakeBatch",
+        "responses": { "200": { "description": "Inbox batch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBatchDetail" } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/v1/intake/batches/{id}/analyze": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "post": {
+        "tags": ["AI Intake"], "summary": "Analyze queued entries in one batch", "operationId": "analyzeIntakeBatch",
+        "responses": { "202": { "description": "Batch analysis queued" }, "404": { "$ref": "#/components/responses/NotFound" }, "503": { "$ref": "#/components/responses/ServiceUnavailable" } }
+      }
+    },
+    "/api/v1/intake/batches/{id}/apply-ready": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "post": {
+        "tags": ["AI Intake"], "summary": "Apply every safe ready change in one batch", "description": "Each inventory write is atomic. Entries that conflict with inventory move to needs_review instead of being applied.", "operationId": "applyReadyIntakeBatch",
+        "responses": { "200": { "description": "Batch apply result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBulkResult" } } } } }
+      }
+    },
+    "/api/v1/intake/apply-ready": {
+      "post": {
+        "tags": ["AI Intake"], "summary": "Apply all safe ready inbox changes", "operationId": "applyAllReadyIntake",
+        "responses": { "200": { "description": "Inbox apply result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBulkResult" } } } } }
+      }
+    },
+    "/api/v1/intake/settings": {
+      "get": {
+        "tags": ["AI Intake"], "summary": "Get AI inbox settings", "operationId": "getIntakeSettings",
+        "responses": { "200": { "description": "Inbox settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeSettings" } } } } }
+      },
+      "patch": {
+        "tags": ["AI Intake"], "summary": "Set analysis behavior for future batches", "description": "Changing this setting never processes existing inbox entries.", "operationId": "updateIntakeSettings",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeSettingsPatch" } } } },
+        "responses": { "200": { "description": "Updated inbox settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeSettings" } } } }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/v1/intake/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "get": {
+        "tags": ["AI Intake"],
+        "summary": "Get one intake entry",
+        "operationId": "getIntakeEntry",
+        "responses": {
+          "200": { "description": "Intake entry", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeEntry" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "patch": {
+        "tags": ["AI Intake"],
+        "summary": "Mark an intake entry pending or reviewed",
+        "operationId": "updateIntakeEntry",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeStatusPatch" } } } },
+        "responses": {
+          "200": { "description": "Updated intake entry", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeEntry" } } } },
+          "400": { "$ref": "#/components/responses/InvalidJSON" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/v1/intake/{id}/resolve": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "post": {
+        "tags": ["AI Intake"], "summary": "Correct and apply, or discard, one reviewed inbox entry", "operationId": "resolveIntakeEntry",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeResolve" } } } },
+        "responses": { "200": { "description": "Review decision completed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeResolveResult" } } } }, "409": { "description": "Corrected change still conflicts with inventory", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/api/v1/intake/{id}/analysis": {
+      "parameters": [{ "$ref": "#/components/parameters/IntakeID" }],
+      "post": {
+        "tags": ["AI Intake"],
+        "summary": "Analyze one staged inbox entry with local AI",
+        "description": "Processes text commands, images, PDFs, audio, and short videos into persisted review-only suggestions. It never changes inventory.",
+        "operationId": "analyzeIntake",
+        "responses": {
+          "200": {
+            "description": "Structured, review-only analysis",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeAnalysis" } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": {
+            "description": "The inbox entry is not pending or its media could not be prepared",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "502": {
+            "description": "Local AI returned an invalid result or failed while processing",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "503": {
+            "description": "Local AI or local transcription is disabled or unavailable",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/intake/analyze-all": {
+      "post": {
+        "tags": ["AI Intake"], "summary": "Analyze every pending inbox entry without an analysis", "operationId": "analyzeAllIntake",
+        "responses": { "200": { "description": "Bulk analysis result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBulkResult" } } } }, "503": { "description": "Local AI is unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      }
+    },
+    "/api/v1/intake/add-all": {
+      "post": {
+        "tags": ["AI Intake"], "summary": "Apply every saved inbox analysis", "description": "Each entry applies atomically. Unclear or unsafe entries remain pending.", "operationId": "addAllIntake",
+        "responses": { "200": { "description": "Bulk add result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBulkResult" } } } } }
+      }
+    },
+    "/api/v1/intake/analyze-and-add-all": {
+      "post": {
+        "tags": ["AI Intake"], "summary": "Analyze and apply the complete pending inbox", "operationId": "analyzeAndAddAllIntake",
+        "responses": { "200": { "description": "Bulk analyze and add result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IntakeBulkResult" } } } }, "503": { "description": "Local AI is unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      }
+    },
+    "/api/v1/intake/{id}/attachments/{attachment_id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/IntakeID" },
+        { "$ref": "#/components/parameters/AttachmentID" }
+      ],
+      "get": {
+        "tags": ["AI Intake"],
+        "summary": "Download a staged attachment",
+        "operationId": "getIntakeAttachment",
+        "responses": {
+          "200": { "description": "Temporary original attachment", "content": { "image/jpeg": {}, "image/png": {}, "image/webp": {}, "application/pdf": {}, "audio/webm": {}, "audio/mp4": {}, "video/webm": {}, "video/mp4": {} } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ItemID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "IntakeID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "AttachmentID": {
+        "name": "attachment_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      }
+    },
+    "responses": {
+      "InvalidJSON": {
+        "description": "Request body is not valid JSON",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "InvalidRequest": {
+        "description": "Request body or content type is invalid",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "RequestTooLarge": {
+        "description": "Request exceeds intake upload limits",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "ValidationError": {
+        "description": "One or more fields are invalid",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "Item not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "InternalError": {
+        "description": "Unexpected server error",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "ServiceUnavailable": {
+        "description": "Application or database is unavailable",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+      }
+    },
+    "schemas": {
+      "Category": {
+        "type": "string",
+        "enum": ["pantry", "drinks", "cleaning", "bathroom", "laundry", "household", "health", "pets", "baby", "other"]
+      },
+      "Item": {
+        "type": "object",
+        "required": ["id", "name", "category", "icon", "quantity", "unit_price_cents", "unit", "location", "low_stock_threshold", "expiry_date", "short_lived", "auto_consume_at", "notes", "created_at", "updated_at", "version"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "maxLength": 80 },
+          "category": { "$ref": "#/components/schemas/Category" },
+          "icon": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$", "examples": ["cleaning_services"] },
+          "quantity": { "type": "number", "minimum": 0, "maximum": 1000000000, "multipleOf": 0.001 },
+          "unit_price_cents": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000000, "description": "Optional EUR price per stored unit, represented as integer cents." },
+          "unit": { "type": "string", "maxLength": 20, "examples": ["bottles"] },
+          "location": { "type": "string", "maxLength": 60, "examples": ["Utility closet"] },
+          "low_stock_threshold": { "type": ["number", "null"], "minimum": 0, "maximum": 1000000000 },
+          "expiry_date": { "type": ["string", "null"], "format": "date" },
+          "short_lived": { "type": "boolean", "description": "Marks items expected to be used soon." },
+          "auto_consume_at": { "type": ["string", "null"], "format": "date-time", "description": "When reached, quantity is automatically set to zero by the minute worker; API reads provide an additional fallback." },
+          "notes": { "type": "string", "maxLength": 500 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ItemCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "quantity"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "category": { "$ref": "#/components/schemas/Category", "default": "other" },
+          "icon": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$", "default": "inventory_2" },
+          "quantity": { "type": "number", "minimum": 0, "maximum": 1000000000, "description": "Rounded to three decimal places when stored." },
+          "unit_price_cents": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000000 },
+          "unit": { "type": "string", "maxLength": 20, "default": "pcs" },
+          "location": { "type": "string", "maxLength": 60, "default": "" },
+          "low_stock_threshold": { "type": ["number", "null"], "minimum": 0, "maximum": 1000000000 },
+          "expiry_date": { "type": ["string", "null"], "format": "date" },
+          "short_lived": { "type": "boolean", "default": false, "description": "When true with positive quantity, auto_consume_at defaults to seven days from creation." },
+          "auto_consume_at": { "type": ["string", "null"], "format": "date-time" },
+          "notes": { "type": "string", "maxLength": 500, "default": "" }
+        }
+      },
+      "ItemPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "category": { "$ref": "#/components/schemas/Category" },
+          "icon": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$" },
+          "quantity": { "type": "number", "minimum": 0, "maximum": 1000000000, "description": "Rounded to three decimal places when stored." },
+          "unit_price_cents": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+          "clear_unit_price": { "type": "boolean", "default": false },
+          "unit": { "type": "string", "maxLength": 20 },
+          "location": { "type": "string", "maxLength": 60 },
+          "low_stock_threshold": { "type": "number", "minimum": 0, "maximum": 1000000000 },
+          "clear_low_stock_threshold": { "type": "boolean", "default": false },
+          "expiry_date": { "type": "string", "format": "date" },
+          "clear_expiry_date": { "type": "boolean", "default": false },
+          "short_lived": { "type": "boolean" },
+          "auto_consume_at": { "type": "string", "format": "date-time" },
+          "clear_auto_consume_at": { "type": "boolean", "default": false },
+          "notes": { "type": "string", "maxLength": 500 }
+        }
+      },
+      "Adjustment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["delta"],
+        "properties": { "delta": { "type": "number", "minimum": -1000000000, "maximum": 1000000000, "not": { "const": 0 }, "description": "Rounded to three decimal places before the atomic adjustment." } }
+      },
+      "ItemList": {
+        "type": "object",
+        "required": ["items", "total", "limit", "offset"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Item" } },
+          "total": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 },
+          "offset": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "IntakeSource": {
+        "type": "string",
+        "enum": ["command", "receipt", "purchase_photo", "voice"]
+      },
+      "IntakeStatus": {
+        "type": "string",
+        "enum": ["pending", "reviewed"]
+      },
+      "IntakeWorkflowState": {
+        "type": "string",
+        "enum": ["queued", "analyzing", "ready", "needs_review", "failed", "applied", "discarded"]
+      },
+      "IntakeAttachment": {
+        "type": "object",
+        "required": ["id", "file_name", "media_type", "size_bytes", "expires_at", "url"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "file_name": { "type": "string", "maxLength": 180 },
+          "media_type": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 1, "maximum": 104857600 },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "url": { "type": "string" }
+        }
+      },
+      "IntakeEntry": {
+        "type": "object",
+        "required": ["id", "source", "text", "status", "workflow_state", "attachments", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "batch_id": { "type": "string", "format": "uuid" },
+          "source": { "$ref": "#/components/schemas/IntakeSource" },
+          "text": { "type": "string", "maxLength": 100000 },
+          "status": { "$ref": "#/components/schemas/IntakeStatus" },
+          "workflow_state": { "$ref": "#/components/schemas/IntakeWorkflowState" },
+          "failure_reason": { "type": "string" },
+          "attachments": { "type": "array", "maxItems": 1, "items": { "$ref": "#/components/schemas/IntakeAttachment" } },
+          "analysis": { "$ref": "#/components/schemas/InboxAnalysis" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "IntakeList": {
+        "type": "object",
+        "required": ["entries", "total", "limit", "offset"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/components/schemas/IntakeEntry" } },
+          "total": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "offset": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "IntakeCommandCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "text"],
+        "properties": {
+          "source": { "const": "command" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 100000 }
+        }
+      },
+      "IntakeMultipartCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "files"],
+        "properties": {
+          "source": { "$ref": "#/components/schemas/IntakeSource" },
+          "text": { "type": "string", "maxLength": 100000 },
+          "files": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string", "format": "binary" } }
+        }
+      },
+      "IntakeBatchMultipartCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": { "type": "string", "maxLength": 100000, "description": "Optional shared context for every file, or the text-only batch input." },
+          "files": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "string", "format": "binary" } }
+        },
+        "anyOf": [{ "required": ["text"] }, { "required": ["files"] }]
+      },
+      "IntakeBatch": {
+        "type": "object",
+        "required": ["batch_id", "entries", "auto_analyze", "analysis_scheduled"],
+        "properties": {
+          "batch_id": { "type": "string", "format": "uuid" },
+          "entries": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/components/schemas/IntakeEntry" } },
+          "auto_analyze": { "type": "boolean", "description": "Configured behavior for new batches." },
+          "analysis_scheduled": { "type": "boolean", "description": "True when this batch was queued for a configured local AI." }
+        }
+      },
+      "IntakeBatchDetail": {
+        "type": "object",
+        "required": ["batch_id", "entries"],
+        "properties": {
+          "batch_id": { "type": "string", "format": "uuid" },
+          "entries": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/components/schemas/IntakeEntry" } }
+        }
+      },
+      "IntakeSettings": {
+        "type": "object",
+        "required": ["auto_analyze"],
+        "properties": { "auto_analyze": { "type": "boolean" } }
+      },
+      "IntakeSettingsPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["auto_analyze"],
+        "properties": { "auto_analyze": { "type": "boolean" } }
+      },
+      "IntakeStatusPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": { "status": { "$ref": "#/components/schemas/IntakeStatus" } }
+      },
+      "IntakeAnalysis": {
+        "type": "object",
+        "required": ["intake_id", "model", "analysis"],
+        "properties": {
+          "intake_id": { "type": "string", "format": "uuid" },
+          "model": { "type": "string" },
+          "analysis": { "$ref": "#/components/schemas/AIAnalysis" }
+        }
+      },
+      "IntakeBulkResult": {
+        "type": "object",
+        "required": ["analyzed", "added", "reviewed"],
+        "properties": {
+          "analyzed": { "type": "integer", "minimum": 0 },
+          "added": { "type": "integer", "minimum": 0 },
+          "reviewed": { "type": "integer", "minimum": 0 },
+          "failed": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+        }
+      },
+      "IntakeResolve": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string", "enum": ["apply", "discard"] },
+          "suggestions": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/AIAnalysisSuggestion" }, "description": "Required when action is apply; these replace the stored suggestions before an atomic apply." }
+        }
+      },
+      "IntakeResolveResult": {
+        "type": "object",
+        "required": ["intake_id", "added", "status"],
+        "properties": {
+          "intake_id": { "type": "string", "format": "uuid" },
+          "added": { "type": "integer", "minimum": 0 },
+          "status": { "$ref": "#/components/schemas/IntakeWorkflowState" }
+        }
+      },
+      "AIAnalysis": {
+        "type": "object",
+        "required": ["summary", "suggestions", "needs_review"],
+        "properties": {
+          "summary": { "type": "string", "maxLength": 1000 },
+          "suggestions": { "type": "array", "maxItems": 500, "items": { "$ref": "#/components/schemas/AIAnalysisSuggestion" } },
+          "needs_review": { "type": "boolean", "description": "A true value requires correction before this entry can be applied. Analysis alone never changes inventory." }
+        }
+      },
+      "InboxAnalysis": {
+        "type": "object",
+        "required": ["model", "summary", "suggestions", "needs_review", "processed_at"],
+        "properties": {
+          "model": { "type": "string" },
+          "summary": { "type": "string", "maxLength": 1000 },
+          "suggestions": { "type": "array", "maxItems": 500, "items": { "$ref": "#/components/schemas/AIAnalysisSuggestion" } },
+          "needs_review": { "type": "boolean" },
+          "processed_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AIAnalysisSuggestion": {
+        "type": "object",
+        "required": ["intent", "item_name", "amount", "unit", "category", "confidence"],
+        "properties": {
+          "intent": { "type": "string", "enum": ["increase", "decrease", "create", "unknown"] },
+          "item_name": { "type": "string", "maxLength": 140 },
+          "amount": { "type": "number", "minimum": 0, "maximum": 1000000 },
+          "unit": { "type": "string", "maxLength": 60 },
+          "category": { "type": "string", "enum": ["pantry", "drinks", "cleaning", "bathroom", "laundry", "household", "health", "pets", "baby", "other"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      },
+      "Summary": {
+        "type": "object",
+        "required": ["tracked", "low_stock", "expiring_soon", "out_of_stock", "inventory_value_cents"],
+        "properties": {
+          "tracked": { "type": "integer", "minimum": 0 },
+          "low_stock": { "type": "integer", "minimum": 0 },
+          "expiring_soon": { "type": "integer", "minimum": 0 },
+          "out_of_stock": { "type": "integer", "minimum": 0 },
+          "inventory_value_cents": { "type": "integer", "minimum": 0, "description": "Rounded sum of quantity multiplied by unit price, in EUR cents." }
+        }
+      },
+      "Choice": {
+        "type": "object",
+        "required": ["value", "label"],
+        "properties": { "value": { "type": "string" }, "label": { "type": "string" }, "icon": { "type": "string" } }
+      },
+      "Metadata": {
+        "type": "object",
+        "required": ["categories", "suggested_units", "suggested_locations", "limits"],
+        "properties": {
+          "categories": { "type": "array", "items": { "$ref": "#/components/schemas/Choice" } },
+          "suggested_units": { "type": "array", "items": { "type": "string" } },
+          "suggested_locations": { "type": "array", "items": { "type": "string" } },
+          "limits": { "type": "object", "additionalProperties": { "type": "integer" } }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status", "database", "version"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "unavailable"] },
+          "database": { "type": "string", "enum": ["ok", "unavailable"] },
+          "version": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error", "request_id"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "fields": { "type": "object", "additionalProperties": { "type": "string" } }
+            }
+          },
+          "request_id": { "type": "string" }
+        }
+      }
+    }
+  }
+}

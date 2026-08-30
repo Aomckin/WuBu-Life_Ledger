@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="description" content="Review and safely apply Stockroom AI captures.">
+  <title>AI inbox — Stockroom</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/app.css?v=2">
+  <link rel="stylesheet" href="/assets/inbox.css?v=1">
+  <script src="/assets/inbox.js?v=1" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#inbox-work">Skip to inbox</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Stockroom home">
+      <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
+      <span><strong>Stockroom</strong><small>AI inbox</small></span>
+    </a>
+    <div class="topbar-actions">
+      <a class="button button-secondary" href="/">
+        Inventory
+      </a>
+    </div>
+  </header>
+
+  <main class="inbox-shell" id="inbox-work">
+    <section class="inbox-hero" aria-labelledby="inbox-title">
+      <div>
+        <p class="eyebrow">AI inbox</p>
+        <h1 id="inbox-title">Review only what needs you.</h1>
+        <p>New captures are analyzed here. Ready changes stay staged until you explicitly apply them.</p>
+        <p class="inbox-focus" id="inbox-focus" hidden></p>
+      </div>
+      <aside class="inbox-settings" aria-labelledby="inbox-settings-title">
+        <span class="material-symbols" aria-hidden="true">inventory_2</span>
+        <div>
+          <strong id="inbox-settings-title">Inbox settings</strong>
+          <label class="inbox-toggle">
+            <input id="auto-analyze" type="checkbox">
+            <span class="inbox-toggle-control" aria-hidden="true"></span>
+            <span>Analyze new batches automatically</span>
+          </label>
+          <small id="auto-analyze-note">Applies only to new uploads.</small>
+        </div>
+      </aside>
+    </section>
+
+    <section class="inbox-capture" aria-labelledby="inbox-capture-title">
+      <div class="inbox-capture-copy">
+        <span class="material-symbols" aria-hidden="true">photo_camera</span>
+        <div><h2 id="inbox-capture-title">Add to AI inbox</h2><p>Use text, voice, or up to 10 files with one shared context.</p></div>
+      </div>
+      <form id="inbox-capture-form" novalidate>
+        <input class="sr-only" id="inbox-files" type="file" accept="image/*,audio/*,video/*,application/pdf" multiple>
+        <label class="inbox-upload-zone" id="inbox-upload-zone" for="inbox-files">
+          <span class="inbox-upload-symbol" aria-hidden="true">+</span>
+          <span><strong>Drop files or choose files</strong><small>Images, PDFs, audio, or video · 10 files / 250 MB</small></span>
+        </label>
+        <label class="inbox-context">
+          <span>Shared context <small>optional</small></span>
+          <textarea id="inbox-text" maxlength="100000" rows="3" placeholder="Weekly shop, pack sizes, date, or anything useful for this batch"></textarea>
+        </label>
+        <div class="inbox-capture-files" id="inbox-capture-files" aria-live="polite"></div>
+        <div class="inbox-capture-footer">
+          <p id="inbox-capture-status" role="status">Original files stay local and are deleted after apply or discard.</p>
+          <button class="button button-primary" id="inbox-capture-submit" type="submit">
+            Add and analyze
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <p class="inbox-error" id="inbox-error" role="alert" hidden></p>
+
+    <section class="inbox-section inbox-section-processing" aria-labelledby="processing-title">
+      <div class="inbox-section-heading">
+        <div><p class="eyebrow">In progress</p><h2 id="processing-title">Processing <span id="processing-count">0</span></h2></div>
+        <button class="button button-secondary" id="analyze-selected" type="button" hidden>Analyze this batch</button>
+      </div>
+      <div class="inbox-card-list" id="processing-list"></div>
+      <p class="inbox-empty" id="processing-empty">Nothing is processing right now.</p>
+    </section>
+
+    <section class="inbox-section inbox-section-ready" aria-labelledby="ready-title">
+      <div class="inbox-section-heading">
+        <div><p class="eyebrow">Safe staged changes</p><h2 id="ready-title">Ready to apply <span id="ready-count">0</span></h2></div>
+        <button class="button button-primary" id="apply-ready" type="button" hidden>Apply 0 ready changes</button>
+      </div>
+      <p class="inbox-section-note">One confirmation applies every ready change shown here. Nothing is applied automatically.</p>
+      <div class="inbox-card-list" id="ready-list"></div>
+      <p class="inbox-empty" id="ready-empty">No safe changes are waiting.</p>
+    </section>
+
+    <section class="inbox-section inbox-section-review" aria-labelledby="review-title">
+      <div class="inbox-section-heading">
+        <div><p class="eyebrow">Needs your decision</p><h2 id="review-title">Needs review <span id="review-count">0</span></h2></div>
+      </div>
+      <p class="inbox-section-note">Correct a suggestion before applying it, or discard the source. Files are deleted in either case.</p>
+      <div class="inbox-card-list" id="review-list"></div>
+      <p class="inbox-empty" id="review-empty">No exceptions need review.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Sources remain in local temporary storage until they are applied or discarded.</span>
+    <span class="footer-links"><a href="/api/v1" target="_blank" rel="noreferrer">API</a><a href="/healthz" target="_blank" rel="noreferrer">Health</a></span>
+  </footer>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>

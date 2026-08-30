@@ -1,0 +1,23 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local runtime state and backups
+/data/
+/intake-tmp/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-*
+stockroom-backup.db
+
+# Build and tooling output
+/coverage.out
+/stockroom
+/.vscode/
+/.idea/
+.DS_Store

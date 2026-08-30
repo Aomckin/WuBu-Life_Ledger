@@ -1,0 +1,8 @@
+services:
+  ollama:
+    gpus: all
+  whisper:
+    build:
+      args:
+        WHISPER_BASE_IMAGE: ${WHISPER_CUDA_IMAGE:?Copy .env.example to .env first}
+    gpus: all
