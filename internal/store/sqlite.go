@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"stockroom/internal/inventory"
+	"stockroom/internal/ledger"
 
 	_ "modernc.org/sqlite"
 )
@@ -24,7 +25,7 @@ var ErrIntakeWorkflowConflict = errors.New("intake workflow state changed")
 
 const itemColumns = `id, name, category, icon, quantity, unit, location,
 	low_stock_threshold, expiry_date, unit_price_cents, short_lived, auto_consume_at,
-	notes, created_at, updated_at, version`
+	notes, created_at, updated_at, version, item_type, opened_at`
 
 type Store struct {
 	db        *sql.DB
@@ -43,7 +44,11 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve database path: %w", err)
 	}
-	databaseURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolutePath)}).String()
+	uriPath := filepath.ToSlash(absolutePath)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	databaseURL := (&url.URL{Scheme: "file", Path: uriPath}).String()
 	dsn := databaseURL +
 		"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
 	db, err := sql.Open("sqlite", dsn)
@@ -197,7 +202,7 @@ AND EXISTS (SELECT 1 FROM intake_analyses WHERE intake_analyses.entry_id = intak
 	if _, err := s.db.ExecContext(ctx, `PRAGMA user_version = 6`); err != nil {
 		return fmt.Errorf("set database schema version: %w", err)
 	}
-	return nil
+	return s.migrateLedger(ctx)
 }
 
 func (s *Store) ensureColumn(ctx context.Context, table, column, statement string) error {
@@ -280,6 +285,9 @@ WHERE id = ?`, input.Name, input.Category, input.Icon, input.Quantity, input.Uni
 func (s *Store) Delete(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM items WHERE id = ?`, id)
 	if err != nil {
+		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+			return fmt.Errorf("%w: preserve purchase/lifecycle history; use finish, discard or durable status", ledger.ErrConflict)
+		}
 		return fmt.Errorf("delete item: %w", err)
 	}
 	return requireAffected(result)
@@ -289,32 +297,16 @@ func (s *Store) Adjust(ctx context.Context, id string, delta float64) (inventory
 	if _, err := s.ApplyDueAutoConsumption(ctx); err != nil {
 		return inventory.Item{}, err
 	}
-	nowTime := time.Now().UTC()
-	now := nowTime.Format(time.RFC3339Nano)
-	newSchedule := nowTime.Add(inventory.ShortLivedTTL).Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE items SET
-quantity = ROUND(quantity + ?, 3),
-auto_consume_at = CASE
-  WHEN ROUND(quantity + ?, 3) <= 0 THEN NULL
-  WHEN short_lived = 1 AND auto_consume_at IS NULL THEN ?
-  ELSE auto_consume_at
-END,
-updated_at = ?, version = version + 1
-WHERE id = ? AND quantity + ? >= 0`, delta, delta, newSchedule, now, id, delta)
-	if err != nil {
-		return inventory.Item{}, fmt.Errorf("adjust quantity: %w", err)
+	input := ledger.InventoryInput{Delta: &delta}
+	action := "ADJUST"
+	if delta < 0 {
+		amount := -delta
+		input.Delta = nil
+		input.Quantity = &amount
+		action = "CONSUME"
 	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return inventory.Item{}, fmt.Errorf("read adjustment result: %w", err)
-	}
-	if affected == 0 {
-		if _, err := s.Get(ctx, id); errors.Is(err, ErrNotFound) {
-			return inventory.Item{}, ErrNotFound
-		}
-		return inventory.Item{}, ErrNegativeQuantity
-	}
-	return s.Get(ctx, id)
+	out, _, err := s.InventoryAction(ctx, "", id, action, input)
+	return out.Item, err
 }
 
 func (s *Store) List(ctx context.Context, filter inventory.ListFilter) (inventory.ListResult, error) {
@@ -324,9 +316,9 @@ func (s *Store) List(ctx context.Context, filter inventory.ListFilter) (inventor
 	where := []string{"1 = 1"}
 	args := []any{}
 	if filter.Search != "" {
-		where = append(where, `(name LIKE ? ESCAPE '\' OR notes LIKE ? ESCAPE '\')`)
+		where = append(where, `(name LIKE ? ESCAPE '\' OR notes LIKE ? ESCAPE '\' OR EXISTS (SELECT 1 FROM product_aliases a WHERE a.item_id=items.id AND (a.alias LIKE ? ESCAPE '\' OR a.normalized_alias LIKE ? ESCAPE '\')))`)
 		search := "%" + escapeLike(filter.Search) + "%"
-		args = append(args, search, search)
+		args = append(args, search, search, search, "%"+escapeLike(ledger.NormalizeName(filter.Search))+"%")
 	}
 	if filter.Category != "" {
 		where = append(where, "category = ?")
@@ -416,9 +408,10 @@ func scanItem(row scanner) (inventory.Item, error) {
 	var unitPrice sql.NullInt64
 	var shortLived int
 	var autoConsume sql.NullString
+	var opened sql.NullString
 	err := row.Scan(&item.ID, &item.Name, &item.Category, &item.Icon, &item.Quantity, &item.Unit,
 		&item.Location, &threshold, &expiry, &unitPrice, &shortLived, &autoConsume,
-		&item.Notes, &item.CreatedAt, &item.UpdatedAt, &item.Version)
+		&item.Notes, &item.CreatedAt, &item.UpdatedAt, &item.Version, &item.ItemType, &opened)
 	if err != nil {
 		return inventory.Item{}, err
 	}
@@ -432,6 +425,9 @@ func scanItem(row scanner) (inventory.Item, error) {
 		item.UnitPriceCents = &unitPrice.Int64
 	}
 	item.ShortLived = shortLived == 1
+	if opened.Valid {
+		item.OpenedAt = &opened.String
+	}
 	if autoConsume.Valid {
 		item.AutoConsumeAt = &autoConsume.String
 	}

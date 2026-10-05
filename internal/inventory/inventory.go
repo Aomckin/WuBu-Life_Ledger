@@ -49,6 +49,8 @@ var SuggestedLocations = []string{
 }
 
 type Item struct {
+	ItemType          string   `json:"item_type"`
+	OpenedAt          *string  `json:"opened_at"`
 	ID                string   `json:"id"`
 	Name              string   `json:"name"`
 	Category          string   `json:"category"`

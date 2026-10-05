@@ -147,7 +147,8 @@ func TestMigrationFromVersionOnePreservesItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open legacy database: %v", err)
 	}
-	if _, err := raw.Exec(`DROP TABLE intake_attachments; DROP TABLE intake_entries;
+	if _, err := raw.Exec(`DROP TRIGGER wubu_item_create; DROP TRIGGER wubu_item_quantity; DROP TRIGGER wubu_item_delete;
+DROP TABLE intake_attachments; DROP TABLE intake_entries;
 ALTER TABLE items DROP COLUMN auto_consume_at;
 ALTER TABLE items DROP COLUMN short_lived;
 ALTER TABLE items DROP COLUMN unit_price_cents;
@@ -169,8 +170,8 @@ PRAGMA user_version = 1;`); err != nil {
 		t.Fatalf("preserved item = %#v, %v", item, err)
 	}
 	var version int
-	if err := migrated.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 6 {
-		t.Fatalf("user_version = %d, %v; want 6", version, err)
+	if err := migrated.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 7 {
+		t.Fatalf("user_version = %d, %v; want 7", version, err)
 	}
 	entries, err := migrated.ListIntakes(context.Background(), intake.ListFilter{Limit: 10})
 	if err != nil || entries.Total != 0 {

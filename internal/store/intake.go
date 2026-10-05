@@ -526,13 +526,17 @@ FROM intake_entries e JOIN intake_analyses a ON a.entry_id = e.id WHERE e.id = ?
 					break
 				}
 			}
+			itemID := uuid.NewString()
 			if _, err := tx.ExecContext(ctx, `INSERT INTO items (
 id, name, category, icon, quantity, unit, location, low_stock_threshold, expiry_date, unit_price_cents,
 short_lived, auto_consume_at, notes, created_at, updated_at, version
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-				uuid.NewString(), input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
+				itemID, input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
 				input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, now); err != nil {
 				return 0, fmt.Errorf("create inbox item: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE inventory_events SET source='intake',note=? WHERE rowid=(SELECT MAX(rowid) FROM inventory_events WHERE item_id=?)`, "Intake entry "+entryID, itemID); err != nil {
+				return 0, err
 			}
 			applied++
 			continue
@@ -556,6 +560,13 @@ WHERE id = ? AND quantity + ? >= 0`, delta, delta, newSchedule, now, item.ID, de
 		}
 		if err := requireAffected(result); err != nil {
 			return 0, ErrNegativeQuantity
+		}
+		eventType := "ADJUST"
+		if delta < 0 {
+			eventType = "CONSUME"
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE inventory_events SET type=?,source='intake',note=? WHERE rowid=(SELECT MAX(rowid) FROM inventory_events WHERE item_id=?)`, eventType, "Intake entry "+entryID, item.ID); err != nil {
+			return 0, err
 		}
 		applied++
 	}
