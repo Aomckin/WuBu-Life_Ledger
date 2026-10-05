@@ -21,3 +21,9 @@ stockroom-backup.db
 /.vscode/
 /.idea/
 .DS_Store
+
+# Wubu local tooling and builds
+/.tools/
+/bin/
+/go-releases.json
+/.runtime/
