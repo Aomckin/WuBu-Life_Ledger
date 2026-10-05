@@ -1,0 +1,14 @@
+{
+  "merchant": "乐尔乐",
+  "purchased_at": "2026-10-05T20:30:00+08:00",
+  "total_amount": 229,
+  "currency": "CNY",
+  "payment_method": "Alipay",
+  "category": "food",
+  "source": "agent",
+  "items": [
+    {"name":"无糖可乐 2L","quantity":4,"unit":"瓶","unit_price":5.5,"subtotal":22,"item_type":"CONSUMABLE"},
+    {"name":"泡面","quantity":2,"unit":"包","unit_price":4,"subtotal":8,"item_type":"CONSUMABLE"},
+    {"name":"耳机","quantity":1,"unit":"个","unit_price":199,"subtotal":199,"item_type":"DURABLE"}
+  ]
+}

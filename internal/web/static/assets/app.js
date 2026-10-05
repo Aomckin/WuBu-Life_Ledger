@@ -1418,7 +1418,7 @@ function formatQuantity(value) {
 }
 
 function formatCurrency(cents) {
-  return new Intl.NumberFormat("en", { style: "currency", currency: "EUR" }).format((cents || 0) / 100);
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format((cents || 0) / 100);
 }
 
 function stepFor(unit) {

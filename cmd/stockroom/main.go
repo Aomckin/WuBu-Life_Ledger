@@ -17,11 +17,11 @@ import (
 	"stockroom/internal/store"
 )
 
-var version = "dev"
+var version = "0.1.0"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		address := "http://127.0.0.1:8080/healthz"
+		address := "http://127.0.0.1:8026/healthz"
 		if len(os.Args) > 2 {
 			address = os.Args[2]
 		}
@@ -33,7 +33,7 @@ func main() {
 	}
 
 	logger := newLogger()
-	databasePath := env("DATABASE_PATH", "./data/stockroom.db")
+	databasePath := env("DATABASE_PATH", "./data/wubu.db")
 	database, err := store.Open(databasePath)
 	if err != nil {
 		logger.Error("database startup failed", "error", err)
@@ -57,7 +57,7 @@ func main() {
 		os.Exit(1)
 	}
 	server := &http.Server{
-		Addr:              env("LISTEN_ADDR", "127.0.0.1:8080"),
+		Addr:              env("LISTEN_ADDR", "127.0.0.1:8026"),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Minute,
@@ -72,7 +72,7 @@ func main() {
 
 	serverErrors := make(chan error, 1)
 	go func() {
-		logger.Info("Stockroom started", "address", server.Addr, "database", databasePath, "version", version)
+		logger.Info("Wubu started", "address", server.Addr, "database", databasePath, "version", version)
 		serverErrors <- server.ListenAndServe()
 	}()
 

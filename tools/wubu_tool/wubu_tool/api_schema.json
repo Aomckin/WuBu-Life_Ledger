@@ -1,0 +1,432 @@
+{
+  "schemas": {
+    "PurchaseInput": {
+      "type": "object",
+      "properties": {
+        "merchant": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "purchased_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "total_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "CNY"
+          ],
+          "default": "CNY"
+        },
+        "payment_method": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "discount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "extra_fee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/PurchaseLine"
+          }
+        }
+      },
+      "required": [
+        "total_amount",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "PurchaseLine": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "item_id": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "multipleOf": 0.001,
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "unit_price": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "subtotal": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "item_type": {
+          "enum": [
+            "CONSUMABLE",
+            "DURABLE",
+            "UNTRACKED"
+          ],
+          "type": "string",
+          "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id."
+        },
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "brand": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "serial_number": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "warranty_until": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "required": [
+        "name",
+        "quantity",
+        "unit",
+        "unit_price",
+        "subtotal",
+        "item_type"
+      ],
+      "additionalProperties": false
+    },
+    "Category": {
+      "type": "string",
+      "enum": [
+        "pantry",
+        "drinks",
+        "cleaning",
+        "bathroom",
+        "laundry",
+        "household",
+        "health",
+        "pets",
+        "baby",
+        "other"
+      ]
+    },
+    "InventoryAction": {
+      "type": "object",
+      "properties": {
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConsumeInput": {
+      "type": "object",
+      "properties": {
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "multipleOf": 0.001,
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "quantity"
+      ],
+      "additionalProperties": false
+    },
+    "InventoryAdjustment": {
+      "type": "object",
+      "properties": {
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "delta": {
+          "type": "number",
+          "minimum": -1000000000,
+          "maximum": 1000000000,
+          "multipleOf": 0.001
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "multipleOf": 0.001
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "delta"
+          ],
+          "not": {
+            "required": [
+              "quantity"
+            ]
+          }
+        },
+        {
+          "required": [
+            "quantity"
+          ],
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        }
+      ]
+    },
+    "MaintenanceInput": {
+      "type": "object",
+      "properties": {
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "cost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DONE",
+            "PLANNED"
+          ],
+          "default": "DONE",
+          "description": "PLANNED must have cost=0; DONE cost>0 creates Expense atomically."
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "AliasInput": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "alias"
+      ],
+      "additionalProperties": false
+    },
+    "DurablePatch": {
+      "type": "object",
+      "properties": {
+        "brand": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "serial_number": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "warranty_until": {
+          "type": "string",
+          "description": "YYYY-MM-DD or empty"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "SOLD",
+            "LOST",
+            "DISCARDED",
+            "ARCHIVED"
+          ]
+        },
+        "sold_at": {
+          "type": "string",
+          "description": "RFC3339 timestamp or empty; required for SOLD"
+        },
+        "sold_price": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "inputs": {
+    "record_purchase_event": "PurchaseInput",
+    "consume_item": "ConsumeInput",
+    "adjust_inventory": "InventoryAdjustment",
+    "open_item": "InventoryAction",
+    "finish_item": "InventoryAction",
+    "discard_item": "InventoryAction",
+    "add_maintenance_event": "MaintenanceInput",
+    "add_product_alias": "AliasInput",
+    "update_durable_details": "DurablePatch"
+  }
+}

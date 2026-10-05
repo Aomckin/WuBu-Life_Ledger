@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
   <meta name="description" content="A calm, private household inventory.">
-  <title>Stockroom — Home inventory</title>
+  <title>物簿 · 库存编辑</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/app.css?v=1">
   <script src="/assets/app.js?v=1" defer></script>
@@ -17,8 +17,8 @@
     <a class="brand" href="/" aria-label="Stockroom home">
       <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
       <span>
-        <strong>Stockroom</strong>
-        <small>Home inventory</small>
+        <strong>物簿</strong>
+        <small>库存编辑 · 返回账簿首页</small>
       </span>
     </a>
     <div class="topbar-actions">
@@ -28,7 +28,7 @@
       </span>
       <a class="button button-secondary button-ai" id="open-intake" href="/inbox">
         <span class="material-symbols" aria-hidden="true">photo_camera</span>
-        AI inbox
+        库存 Intake
         <span class="intake-count" id="intake-count" hidden>0</span>
       </a>
       <button class="button button-primary" id="add-item" type="button">
@@ -181,7 +181,7 @@
   </main>
 
   <footer class="footer">
-    <span>Stockroom stores data in your local SQLite database.</span>
+    <span>物簿将数据保存在本地 SQLite；购买请从账簿首页记录，以同步费用与历史。</span>
     <span class="footer-links">
       <a href="/api/v1" target="_blank" rel="noreferrer">API</a>
       <a href="/api/v1/openapi.json" target="_blank" rel="noreferrer">OpenAPI</a>
@@ -253,7 +253,7 @@
           <label class="field">
             <span>Unit price <small>optional</small></span>
             <input id="item-price" name="unit_price" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="0.00">
-            <small>EUR per stored unit.</small>
+            <small>CNY 元 / 库存单位。</small>
             <small class="field-error" data-error-for="unit_price_cents"></small>
           </label>
           <label class="field">

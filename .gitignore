@@ -27,3 +27,8 @@ stockroom-backup.db
 /bin/
 /go-releases.json
 /.runtime/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/

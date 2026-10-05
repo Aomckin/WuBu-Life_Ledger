@@ -16,3 +16,9 @@ demo/
 local-ai/
 README.md
 SECURITY.md
+.tools/
+.runtime/
+bin/
+go-releases.json
+tools/
+docs/

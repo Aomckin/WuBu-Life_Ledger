@@ -18,6 +18,7 @@ import (
 
 	"stockroom/internal/ai"
 	"stockroom/internal/inventory"
+	"stockroom/internal/ledger"
 	"stockroom/internal/media"
 	"stockroom/internal/store"
 	"stockroom/internal/web"
@@ -26,19 +27,20 @@ import (
 const maxBodyBytes = 1 << 20
 
 type API struct {
-	store      *store.Store
-	version    string
-	logger     *slog.Logger
-	static     http.Handler
-	staticFS   fs.FS
-	index      []byte
-	inbox      []byte
-	quicklist  []byte
-	openAPI    []byte
-	categories map[string]bool
-	analyzer   ai.Analyzer
-	media      *media.Processor
-	analysisMu sync.Mutex
+	store         *store.Store
+	version       string
+	logger        *slog.Logger
+	static        http.Handler
+	staticFS      fs.FS
+	index         []byte
+	inventoryPage []byte
+	inbox         []byte
+	quicklist     []byte
+	openAPI       []byte
+	categories    map[string]bool
+	analyzer      ai.Analyzer
+	media         *media.Processor
+	analysisMu    sync.Mutex
 }
 
 type errorBody struct {
@@ -68,6 +70,10 @@ func New(database *store.Store, version string, logger *slog.Logger, analyzer ai
 	if err != nil {
 		return nil, fmt.Errorf("read embedded index: %w", err)
 	}
+	ledgerPage, err := web.ReadFile("ledger.html")
+	if err != nil {
+		return nil, err
+	}
 	inbox, err := web.ReadFile("inbox.html")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded inbox: %w", err)
@@ -92,10 +98,11 @@ func New(database *store.Store, version string, logger *slog.Logger, analyzer ai
 	api := &API{
 		store: database, version: version, logger: logger,
 		static: http.FileServer(http.FS(staticFS)), staticFS: staticFS,
-		index: index, inbox: inbox, quicklist: quicklist, openAPI: openAPI, categories: categories,
+		index: ledgerPage, inventoryPage: index, inbox: inbox, quicklist: quicklist, openAPI: openAPI, categories: categories,
 		analyzer: analyzer, media: media.New(transcriber),
 	}
 	mux := http.NewServeMux()
+	api.registerLedger(mux)
 	mux.HandleFunc("GET /healthz", api.health)
 	mux.HandleFunc("GET /api/v1", api.apiRoot)
 	mux.HandleFunc("GET /api/v1/meta", api.meta)
@@ -146,7 +153,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) apiRoot(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name": "Stockroom API", "version": "v1",
+		"name": "物簿 Life Ledger API", "version": "v1", "app_version": "0.1.0", "purchases": "/api/v1/purchases", "expenses": "/api/v1/expenses", "inventory_events": "/api/v1/inventory-events", "maintenance": "/api/v1/maintenance", "ledger_summary": "/api/v1/ledger/summary",
 		"items": "/api/v1/items", "intake": "/api/v1/intake", "summary": "/api/v1/summary",
 		"analysis": "/api/v1/intake/{id}/analysis", "batches": "/api/v1/intake/batches", "apply_ready": "/api/v1/intake/apply-ready", "inbox_settings": "/api/v1/intake/settings", "analyze_all": "/api/v1/intake/analyze-all", "add_all": "/api/v1/intake/add-all", "analyze_and_add_all": "/api/v1/intake/analyze-and-add-all", "metadata": "/api/v1/meta", "openapi": "/api/v1/openapi.json",
 	})
@@ -260,24 +267,38 @@ func (a *API) deleteItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) adjustItem(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		Delta float64 `json:"delta"`
-	}
+	var payload ledger.InventoryInput
 	if err := decodeJSON(w, r, &payload); err != nil {
 		a.badJSON(w, r, err)
 		return
 	}
-	delta, err := inventory.ValidateAdjustment(payload.Delta)
-	if err != nil {
-		a.validationError(w, r, map[string]string{"delta": err.Error()})
+	if payload.Delta != nil {
+		delta, err := inventory.ValidateAdjustment(*payload.Delta)
+		if err != nil {
+			a.validationError(w, r, map[string]string{"delta": err.Error()})
+			return
+		}
+		payload.Delta = &delta
+	}
+	if _, err := a.store.ApplyDueAutoConsumption(r.Context()); err != nil {
+		a.ledgerError(w, r, err)
 		return
 	}
-	item, err := a.store.Adjust(r.Context(), r.PathValue("id"), delta)
+	action := "ADJUST"
+	// Preserve legacy negative-delta consume behavior; absolute corrections remain ADJUST.
+	if payload.Delta != nil && *payload.Delta < 0 && payload.Quantity == nil {
+		amount := -*payload.Delta
+		payload.Delta = nil
+		payload.Quantity = &amount
+		action = "CONSUME"
+	}
+	result, replay, err := a.store.InventoryAction(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), action, payload)
 	if err != nil {
-		a.handleStoreError(w, r, err)
+		a.ledgerError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+	replayHeader(w, replay)
+	writeJSON(w, http.StatusOK, result.Item)
 }
 
 func (a *API) parseListFilter(r *http.Request) (inventory.ListFilter, map[string]string) {
@@ -387,6 +408,8 @@ func (a *API) handleDomainError(w http.ResponseWriter, r *http.Request, err erro
 
 func (a *API) handleStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, ledger.ErrConflict):
+		a.errorResponse(w, r, http.StatusConflict, "ledger_conflict", err.Error(), nil)
 	case errors.Is(err, store.ErrNotFound):
 		a.errorResponse(w, r, http.StatusNotFound, "not_found", "Item not found.", nil)
 	case errors.Is(err, store.ErrNegativeQuantity):

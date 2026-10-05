@@ -1,19 +1,19 @@
-name: stockroom
+name: wubu
 
 services:
   app:
-    image: ${STOCKROOM_IMAGE:-stockroom:local}
+    image: ${STOCKROOM_IMAGE:-wubu:local}
     build:
       context: .
       args:
-        VERSION: ${STOCKROOM_VERSION:-local}
+        VERSION: ${STOCKROOM_VERSION:-0.1.0}
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8026}:8080"
     environment:
-      DATABASE_PATH: /data/stockroom.db
+      DATABASE_PATH: /data/wubu.db
       LISTEN_ADDR: :8080
       LOG_FORMAT: json
-      TZ: ${TZ:-Europe/Berlin}
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - stockroom_data:/data
     read_only: true
