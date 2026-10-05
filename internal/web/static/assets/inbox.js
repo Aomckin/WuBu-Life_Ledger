@@ -9,9 +9,9 @@ const ALLOWED_TYPES = new Set([
 
 const DEFAULT_META = {
   categories: [
-    { value: "pantry", label: "Pantry & food" }, { value: "drinks", label: "Drinks" },
-    { value: "cleaning", label: "Cleaning" }, { value: "bathroom", label: "Bathroom" },
-    { value: "laundry", label: "Laundry" }, { value: "household", label: "Household" },
+    { value: "pantry", label: "Pantry & food" }, { value: "drinks", label: "饮品" },
+    { value: "cleaning", label: "清洁用品" }, { value: "bathroom", label: "Bathroom" },
+    { value: "laundry", label: "洗衣用品" }, { value: "household", label: "家居用品" },
     { value: "health", label: "Health" }, { value: "pets", label: "Pets" },
     { value: "baby", label: "Baby" }, { value: "other", label: "Other" },
   ],
@@ -72,7 +72,7 @@ async function request(path, options = {}) {
   const body = contentType.includes("json") ? await response.json() : null;
   if (!response.ok) {
     const detail = body?.error || null;
-    throw new APIError(detail?.message || `Request failed with HTTP ${response.status}.`, response.status, detail);
+    throw new APIError(WubuZh.error(detail, response.status), response.status, detail);
   }
   return body;
 }
@@ -107,10 +107,10 @@ async function refreshSettings() {
   try {
     const settings = await request("/api/v1/intake/settings");
     elements.autoAnalyze.checked = settings.auto_analyze;
-    elements.autoAnalyzeNote.textContent = "Applies only to new uploads.";
+    elements.autoAnalyzeNote.textContent = "仅对新上传的内容生效。";
   } catch {
     elements.autoAnalyze.disabled = true;
-    elements.autoAnalyzeNote.textContent = "Inbox settings are unavailable.";
+    elements.autoAnalyzeNote.textContent = "收件箱设置暂不可用。";
   }
 }
 
@@ -119,8 +119,8 @@ async function saveSettings() {
   elements.autoAnalyze.disabled = true;
   try {
     await request("/api/v1/intake/settings", { method: "PATCH", body: JSON.stringify({ auto_analyze: value }) });
-    elements.autoAnalyzeNote.textContent = value ? "New uploads analyze automatically." : "New uploads stay queued until you analyze them.";
-    showToast("Inbox setting saved.");
+    elements.autoAnalyzeNote.textContent = value ? "新上传的内容将自动分析。" : "新上传的内容将暂存，等待手动分析。";
+    showToast("已保存收件箱设置。");
   } catch (error) {
     elements.autoAnalyze.checked = !value;
     showError(errorMessage(error));
@@ -133,29 +133,29 @@ function addFiles(fileList) {
   if (state.saving) return;
   const candidate = [...state.files, ...fileList];
   if (candidate.length > MAX_BATCH_FILES) {
-    showError(`Choose at most ${MAX_BATCH_FILES} files at once.`);
+    showError(`每次最多选择 ${MAX_BATCH_FILES} 个文件。`);
     return;
   }
   let total = 0;
   for (const file of candidate) {
     if (!ALLOWED_TYPES.has(file.type)) {
-      showError(`${file.name} uses an unsupported file type.`);
+      showError(`${file.name} 的文件格式不受支持。`);
       return;
     }
     if (file.size === 0 || file.size > MAX_FILE_BYTES) {
-      showError(`${file.name} must be between 1 byte and 100 MB.`);
+      showError(`${file.name} 的大小须在 1 字节至 100 MB 之间。`);
       return;
     }
     total += file.size;
   }
   if (total > MAX_BATCH_BYTES) {
-    showError("All files in one batch must be at most 250 MB.");
+    showError("每批文件总大小不能超过 250 MB。");
     return;
   }
   hideError();
   state.files = candidate;
   renderFiles();
-  elements.captureStatus.textContent = `${candidate.length} file${candidate.length === 1 ? "" : "s"} ready with one shared context.`;
+  elements.captureStatus.textContent = `已选择 ${candidate.length} 个文件，共用一份说明。`;
 }
 
 function handleDragOver(event) {
@@ -183,7 +183,7 @@ function renderFiles() {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.dataset.fileIndex = index;
-    remove.setAttribute("aria-label", `Remove ${file.name}`);
+    remove.setAttribute("aria-label", `移除 ${file.name}`);
     const removeIcon = document.createElement("span");
     removeIcon.className = "material-symbols";
     removeIcon.textContent = "close";
@@ -206,7 +206,7 @@ async function submitCapture(event) {
   if (state.saving) return;
   if (!text && state.files.length === 0) {
     elements.text.focus();
-    showError("Add a description or at least one file.");
+    showError("请输入说明或选择至少一个文件。");
     return;
   }
   setCaptureBusy(true);
@@ -221,11 +221,11 @@ async function submitCapture(event) {
     renderFiles();
     selectBatch(batch.batch_id);
     elements.captureStatus.textContent = batch.analysis_scheduled
-      ? `${batch.entries.length} ${batch.entries.length === 1 ? "input is" : "inputs are"} analyzing.`
+      ? `正在分析 ${batch.entries.length} 条录入内容。`
       : batch.auto_analyze
-        ? "Saved. Local AI is unavailable."
-        : "Saved. Automatic analysis is off.";
-    showToast("Added to AI inbox.");
+        ? "已保存，本地 AI 暂不可用。"
+        : "已保存，自动分析已关闭。";
+    showToast("已添加到 AI 收件箱。");
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -282,10 +282,10 @@ function renderInbox() {
   renderSection(elements.review, elements.reviewCount, elements.reviewEmpty, review, renderReviewEntry);
 
   elements.applyReady.hidden = ready.length === 0;
-  elements.applyReady.textContent = `Apply ${ready.length} ready change${ready.length === 1 ? "" : "s"}`;
+  elements.applyReady.textContent = `应用 ${ready.length} 条就绪变更`;
   const canAnalyze = entries.some((entry) => entry.workflow_state === "queued" || entry.workflow_state === "failed");
   elements.analyzeSelected.hidden = !canAnalyze;
-  elements.analyzeSelected.textContent = state.selectedBatch ? "Analyze this batch" : "Analyze queued entries";
+  elements.analyzeSelected.textContent = state.selectedBatch ? "分析本批次" : "分析待处理内容";
 }
 
 function renderFocus(entries) {
@@ -294,10 +294,10 @@ function renderFocus(entries) {
     return;
   }
   elements.focus.replaceChildren();
-  const label = document.createTextNode(entries.length ? "Viewing this batch. " : "This batch has no pending entries. ");
+  const label = document.createTextNode(entries.length ? "正在查看本批次。 " : "本批次没有待处理内容。 ");
   const all = document.createElement("a");
   all.href = "/inbox";
-  all.textContent = "Show all inbox";
+  all.textContent = "查看全部收件箱";
   elements.focus.append(label, all);
   elements.focus.hidden = false;
 }
@@ -309,11 +309,11 @@ function renderSection(container, count, empty, entries, renderer) {
 }
 
 function renderProcessingEntry(entry) {
-  return baseEntry(entry, { state: entry.workflow_state === "analyzing" ? "Analyzing" : "Queued", tone: "processing" });
+  return baseEntry(entry, { state: entry.workflow_state === "analyzing" ? "正在分析" : "等待分析", tone: "processing" });
 }
 
 function renderReadyEntry(entry) {
-  const card = baseEntry(entry, { state: "Ready", tone: "ready" });
+  const card = baseEntry(entry, { state: "已就绪", tone: "ready" });
   const summary = document.createElement("p");
   summary.className = "inbox-suggestion-summary";
   summary.textContent = suggestionSummary(entry.analysis?.suggestions || []);
@@ -322,19 +322,19 @@ function renderReadyEntry(entry) {
 }
 
 function renderReviewEntry(entry) {
-  const card = baseEntry(entry, { state: entry.workflow_state === "failed" ? "Analysis failed" : "Review", tone: entry.workflow_state === "failed" ? "failed" : "review" });
+  const card = baseEntry(entry, { state: entry.workflow_state === "failed" ? "分析失败" : "待审核", tone: entry.workflow_state === "failed" ? "failed" : "review" });
   card.classList.add("review-card");
   const reason = document.createElement("p");
   reason.className = "review-reason";
-  reason.textContent = entry.failure_reason || (entry.workflow_state === "failed" ? "Analysis could not be completed." : "Check and correct this suggestion before applying.");
+  reason.textContent = (entry.failure_reason ? WubuZh.error(entry.failure_reason) : "") || (entry.workflow_state === "failed" ? "无法完成分析。" : "请核对并修正建议后再应用。");
   card.append(reason);
 
   if (entry.workflow_state === "failed" || !entry.analysis) {
     const actions = document.createElement("div");
     actions.className = "review-actions";
-    const retry = button("Try analysis again", "button button-secondary", "retry-analysis");
+    const retry = button("重新分析", "button button-secondary", "retry-analysis");
     retry.dataset.entryId = entry.id;
-    const discard = button("Discard", "button button-secondary review-discard", "discard-entry");
+    const discard = button("丢弃", "button button-secondary review-discard", "discard-entry");
     discard.dataset.entryId = entry.id;
     actions.append(retry, discard);
     card.append(actions);
@@ -349,13 +349,13 @@ function renderReviewEntry(entry) {
   card.append(editor);
   const actions = document.createElement("div");
   actions.className = "review-actions";
-  const add = button("Add change", "button button-secondary review-add", "add-suggestion");
+  const add = button("添加变更", "button button-secondary review-add", "add-suggestion");
   add.dataset.entryId = entry.id;
   const actionGroup = document.createElement("div");
   actionGroup.className = "review-action-group";
-  const discard = button("Discard", "button button-secondary review-discard", "discard-entry");
+  const discard = button("丢弃", "button button-secondary review-discard", "discard-entry");
   discard.dataset.entryId = entry.id;
-  const apply = button("Correct and apply", "button button-primary", "resolve-entry");
+  const apply = button("修正并应用", "button button-primary", "resolve-entry");
   apply.dataset.entryId = entry.id;
   actionGroup.append(discard, apply);
   actions.append(add, actionGroup);
@@ -381,7 +381,7 @@ function baseEntry(entry, status) {
   source.textContent = sourceLabel(entry.source);
   titleRow.append(title, source);
   const detail = document.createElement("p");
-  detail.textContent = entry.analysis?.summary || entry.text || "Source file ready for analysis.";
+  detail.textContent = entry.analysis?.summary || entry.text || "原文件已就绪，等待分析。";
   const meta = document.createElement("div");
   meta.className = "inbox-entry-meta";
   meta.textContent = formatDate(entry.created_at);
@@ -424,7 +424,7 @@ function attachmentPreview(attachments) {
       link.href = attachment.url;
       link.target = "_blank";
       link.rel = "noreferrer";
-      link.append(document.createTextNode(`Open ${attachment.file_name}`));
+      link.append(document.createTextNode(`打开 ${attachment.file_name}`));
       preview.append(link);
     }
   });
@@ -435,14 +435,14 @@ function reviewRow(suggestion) {
   const row = document.createElement("div");
   row.className = "review-row";
   row.append(
-    reviewSelect("Intent", "intent", suggestion.intent || "increase", [["increase", "Increase"], ["decrease", "Decrease"], ["create", "Create"]]),
-    reviewInput("Item", "item_name", suggestion.item_name || "", "text"),
-    reviewInput("Amount", "amount", suggestion.amount || "", "number", "any"),
-    reviewInput("Unit", "unit", suggestion.unit || "pcs", "text"),
-    reviewSelect("Category", "category", suggestion.category || "other", state.meta.categories.map((category) => [category.value, category.label])),
+    reviewSelect("操作", "intent", suggestion.intent || "increase", [["increase", "增加"], ["decrease", "减少"], ["create", "新增"]]),
+    reviewInput("物品", "item_name", suggestion.item_name || "", "text"),
+    reviewInput("数量", "amount", suggestion.amount || "", "number", "any"),
+    reviewInput("单位", "unit", suggestion.unit || "个", "text"),
+    reviewSelect("分类", "category", suggestion.category || "other", state.meta.categories.map((category) => [category.value, WubuZh.category(category.value)])),
   );
   const remove = button("", "review-remove", "remove-suggestion");
-  remove.setAttribute("aria-label", "Remove change");
+  remove.setAttribute("aria-label", "删除变更");
   remove.textContent = "×";
   row.append(remove);
   return row;
@@ -456,7 +456,8 @@ function reviewInput(label, field, value, type, step = "") {
   input.name = field;
   input.type = type;
   if (step) input.step = step;
-  input.value = value;
+  if (field === "unit") WubuZh.setEditable(input, value, "unit");
+  else input.value = value;
   if (field === "amount") input.min = "0.001";
   wrapper.append(input);
   return wrapper;
@@ -482,7 +483,7 @@ async function handleReviewAction(event) {
     const row = buttonElement.closest(".review-row");
     const editor = buttonElement.closest(".review-editor");
     if (editor.querySelectorAll(".review-row").length === 1) {
-      showError("Keep at least one change or discard this entry.");
+      showError("请保留至少一条变更，或丢弃此条内容。");
       return;
     }
     row.remove();
@@ -507,7 +508,7 @@ async function handleReviewAction(event) {
 async function retryAnalysis(entryID) {
   try {
     await request(`/api/v1/intake/${encodeURIComponent(entryID)}/analysis`, { method: "POST" });
-    showToast("Analysis started again.");
+    showToast("已重新开始分析。");
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -516,14 +517,14 @@ async function retryAnalysis(entryID) {
 
 async function discardEntry(entryID) {
   const entry = state.entries.find((candidate) => candidate.id === entryID);
-  if (!entry || !window.confirm("Discard this inbox entry and delete its source file?")) return;
+  if (!entry || !window.confirm("丢弃此条内容并删除原文件？")) return;
   try {
     if (entry.workflow_state === "needs_review") {
       await request(`/api/v1/intake/${encodeURIComponent(entryID)}/resolve`, { method: "POST", body: JSON.stringify({ action: "discard" }) });
     } else {
       await request(`/api/v1/intake/${encodeURIComponent(entryID)}`, { method: "PATCH", body: JSON.stringify({ status: "reviewed" }) });
     }
-    showToast("Inbox entry discarded.");
+    showToast("已丢弃此条内容。");
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -537,13 +538,13 @@ async function resolveEntry(entryID) {
     intent: row.querySelector('[name="intent"]').value,
     item_name: row.querySelector('[name="item_name"]').value.trim(),
     amount: Number(row.querySelector('[name="amount"]').value),
-    unit: row.querySelector('[name="unit"]').value.trim(),
+    unit: WubuZh.originalValue(row.querySelector('[name="unit"]')).trim(),
     category: row.querySelector('[name="category"]').value,
     confidence: 1,
   }));
   try {
     await request(`/api/v1/intake/${encodeURIComponent(entryID)}/resolve`, { method: "POST", body: JSON.stringify({ action: "apply", suggestions }) });
-    showToast("Corrected change applied.");
+    showToast("已应用修正后的变更。");
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -556,7 +557,7 @@ async function analyzeSelected() {
       ? `/api/v1/intake/batches/${encodeURIComponent(state.selectedBatch)}/analyze`
       : "/api/v1/intake/analyze-all";
     await request(path, { method: "POST" });
-    showToast("Analysis started.");
+    showToast("已开始分析。");
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -565,14 +566,14 @@ async function analyzeSelected() {
 
 async function applyReady() {
   const entries = visibleEntries().filter((entry) => entry.workflow_state === "ready");
-  if (!entries.length || !window.confirm(`Apply ${entries.length} ready change${entries.length === 1 ? "" : "s"} to inventory?`)) return;
+  if (!entries.length || !window.confirm(`将 ${entries.length} 条就绪变更应用到库存？`)) return;
   try {
     const path = state.selectedBatch
       ? `/api/v1/intake/batches/${encodeURIComponent(state.selectedBatch)}/apply-ready`
       : "/api/v1/intake/apply-ready";
     const result = await request(path, { method: "POST" });
     const failed = result.failed?.length || 0;
-    showToast(failed ? `${result.added} change${result.added === 1 ? "" : "s"} applied; ${failed} need review.` : `${result.added} change${result.added === 1 ? "" : "s"} applied.`, failed > 0);
+    showToast(failed ? `已应用 ${result.added} 条变更，${failed} 条需要审核。` : `已应用 ${result.added} 条变更。`, failed > 0);
     await refreshInbox();
   } catch (error) {
     showError(errorMessage(error));
@@ -581,11 +582,11 @@ async function applyReady() {
 
 function entryTitle(entry) {
   if (entry.attachments?.length) return entry.attachments.map((attachment) => attachment.file_name).join(", ");
-  return entry.text.length > 72 ? `${entry.text.slice(0, 72)}…` : entry.text || "Text input";
+  return entry.text.length > 72 ? `${entry.text.slice(0, 72)}…` : entry.text || "文字输入";
 }
 
 function sourceLabel(source) {
-  return ({ command: "Text", receipt: "Document", purchase_photo: "Image", voice: "Voice" })[source] || "Input";
+  return ({ command: "文字", receipt: "文档", purchase_photo: "图片", voice: "语音" })[source] || "录入内容";
 }
 
 function sourceIcon(source) {
@@ -597,12 +598,12 @@ function sourceIconForFile(file) {
 }
 
 function suggestionSummary(suggestions) {
-  if (!suggestions.length) return "No actionable changes detected.";
-  return suggestions.map((suggestion) => `${suggestion.intent} ${suggestion.amount} ${suggestion.unit || "pcs"} ${suggestion.item_name}`).join(" · ");
+  if (!suggestions.length) return "未发现可应用的库存变更。";
+  return suggestions.map((suggestion) => `${WubuZh.intent(suggestion.intent)} ${suggestion.amount} ${WubuZh.unit(suggestion.unit || "pcs")} ${suggestion.item_name}`).join(" · ");
 }
 
 function emptySuggestion() {
-  return { intent: "increase", item_name: "", amount: "", unit: "pcs", category: "other", confidence: 1 };
+  return { intent: "increase", item_name: "", amount: "", unit: "个", category: "other", confidence: 1 };
 }
 
 function button(label, className, action) {
@@ -621,13 +622,13 @@ function formatFileSize(bytes) {
 }
 
 function formatDate(value) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
 function errorMessage(error) {
   const fields = error?.detail?.fields;
-  if (fields && Object.keys(fields).length) return Object.values(fields)[0];
-  return error?.message || "The inbox request could not be completed.";
+  if (fields && Object.keys(fields).length) return WubuZh.error(error.detail);
+  return WubuZh.error(error);
 }
 
 function showError(message) {

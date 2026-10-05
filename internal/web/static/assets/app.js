@@ -115,11 +115,11 @@ const AUTO_ICON_RULES = [
 const DEFAULT_META = {
   categories: [
     { value: "pantry", label: "Pantry", icon: "grocery" },
-    { value: "drinks", label: "Drinks", icon: "local_drink" },
-    { value: "cleaning", label: "Cleaning", icon: "cleaning_services" },
+    { value: "drinks", label: "饮品", icon: "local_drink" },
+    { value: "cleaning", label: "清洁用品", icon: "cleaning_services" },
     { value: "bathroom", label: "Bathroom", icon: "shower" },
-    { value: "laundry", label: "Laundry", icon: "laundry" },
-    { value: "household", label: "Household", icon: "home" },
+    { value: "laundry", label: "洗衣用品", icon: "laundry" },
+    { value: "household", label: "家居用品", icon: "home" },
     { value: "health", label: "Health", icon: "medication" },
     { value: "pets", label: "Pets", icon: "pets" },
     { value: "baby", label: "Baby", icon: "child_friendly" },
@@ -278,7 +278,7 @@ async function request(path, options = {}) {
   const body = contentType.includes("json") ? await response.json() : null;
   if (!response.ok) {
     const detail = body?.error || null;
-    throw new APIError(detail?.message || `Request failed with HTTP ${response.status}.`, response.status, detail);
+    throw new APIError(WubuZh.error(detail, response.status), response.status, detail);
   }
   return body;
 }
@@ -383,13 +383,13 @@ function closeIntakeDialog() {
 function addIntakeFiles(fileList) {
   const incoming = [...fileList];
   if (incoming.length !== 1) {
-    showIntakeAlert("Choose exactly one file.");
+    showIntakeAlert("请选择一个文件。");
     return;
   }
   const [file] = incoming;
   let error = "";
-  if (!INTAKE_TYPES.has(file.type)) error = `${file.name} uses an unsupported file type.`;
-  else if (file.size === 0 || file.size > MAX_INTAKE_FILE_BYTES) error = `${file.name} must be between 1 byte and 100 MB.`;
+  if (!INTAKE_TYPES.has(file.type)) error = `${file.name} 的文件格式不受支持。`;
+  else if (file.size === 0 || file.size > MAX_INTAKE_FILE_BYTES) error = `${file.name} 的大小须在 1 字节至 100 MB 之间。`;
   if (!error) state.intakeFiles = [file];
   renderIntakeFiles();
   if (error) showIntakeAlert(error);
@@ -431,7 +431,7 @@ function renderIntakeFiles() {
     remove.className = "remove-upload";
     remove.type = "button";
     remove.dataset.fileIndex = index;
-    remove.setAttribute("aria-label", `Remove ${file.name}`);
+    remove.setAttribute("aria-label", `移除 ${file.name}`);
     const removeIcon = document.createElement("span");
     removeIcon.className = "material-symbols";
     removeIcon.textContent = "close";
@@ -463,7 +463,7 @@ async function saveIntakeEntry(event) {
   event.preventDefault();
   if (state.intakeSaving) return;
   if (state.intakeFiles.length === 0) {
-    showIntakeAlert("Choose one file to upload.");
+    showIntakeAlert("请选择要上传的文件。");
     return;
   }
   setIntakeBusy(true);
@@ -472,7 +472,7 @@ async function saveIntakeEntry(event) {
     await submitIntake(sourceForUpload(file), elements.intakeText.value, [file]);
     resetIntakeForm();
     elements.intakeDialog.close();
-    showToast("Saved to AI inbox.");
+    showToast("已保存到 AI 收件箱。");
     await refreshIntake();
   } catch (error) {
     showIntakeAlert(intakeErrorMessage(error));
@@ -498,29 +498,29 @@ function addQuickCommandFiles(fileList) {
   if (incoming.length === 0) return;
   const candidate = [...state.quickCommandFiles, ...incoming];
   if (candidate.length > MAX_BATCH_FILES) {
-    showToast(`Choose at most ${MAX_BATCH_FILES} files at once.`, true);
+    showToast(`每次最多选择 ${MAX_BATCH_FILES} 个文件。`, true);
     return;
   }
   let totalBytes = 0;
   for (const file of candidate) {
     if (!INTAKE_TYPES.has(file.type)) {
-      showToast(`${file.name} uses an unsupported file type.`, true);
+      showToast(`${file.name} 的文件格式不受支持。`, true);
       return;
     }
     if (file.size === 0 || file.size > MAX_INTAKE_FILE_BYTES) {
-      showToast(`${file.name} must be between 1 byte and 100 MB.`, true);
+      showToast(`${file.name} 的大小须在 1 字节至 100 MB 之间。`, true);
       return;
     }
     totalBytes += file.size;
   }
   if (totalBytes > MAX_BATCH_FILE_BYTES) {
-    showToast("All files in one batch must be at most 250 MB.", true);
+    showToast("每批文件总大小不能超过 250 MB。", true);
     return;
   }
   state.quickCommandFiles = candidate;
   renderQuickCommandFiles();
   elements.quickCommandStatus.classList.remove("is-recording");
-  elements.quickCommandStatus.textContent = `${candidate.length} file${candidate.length === 1 ? "" : "s"} ready to add with one shared context.`;
+  elements.quickCommandStatus.textContent = `已选择 ${candidate.length} 个文件，共用一份说明。`;
 }
 
 function renderQuickCommandFiles() {
@@ -536,7 +536,7 @@ function renderQuickCommandFiles() {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.dataset.quickFileIndex = index;
-    remove.setAttribute("aria-label", `Remove ${file.name}`);
+    remove.setAttribute("aria-label", `移除 ${file.name}`);
     const removeIcon = document.createElement("span");
     removeIcon.className = "material-symbols";
     removeIcon.textContent = "close";
@@ -571,7 +571,7 @@ async function submitQuickCapture(options = {}) {
   if (state.quickCaptureSaving) return false;
   if (text === "" && files.length === 0) {
     elements.quickCommandInput.focus();
-    elements.quickCommandStatus.textContent = "Add a description, a voice note, or at least one file.";
+    elements.quickCommandStatus.textContent = "请输入说明、录制语音或选择至少一个文件。";
     return false;
   }
   setQuickCaptureBusy(true);
@@ -586,7 +586,7 @@ async function submitQuickCapture(options = {}) {
       renderQuickCommandFiles();
     }
     showQuickBatchStatus(result);
-    showToast("Added to AI inbox.");
+    showToast("已添加到 AI 收件箱。");
     await refreshIntake();
     return true;
   } catch (error) {
@@ -613,14 +613,14 @@ function showQuickBatchStatus(batch) {
   elements.quickCommandBatch.hidden = false;
   const count = batch.entries?.length || 0;
   if (batch.analysis_scheduled) {
-    elements.quickCommandStatus.textContent = `${count} ${count === 1 ? "input is" : "inputs are"} analyzing.`;
+    elements.quickCommandStatus.textContent = `正在分析 ${count} 条录入内容。`;
     refreshQuickBatchStatus();
     return;
   }
   if (batch.auto_analyze) {
-    elements.quickCommandStatus.textContent = `${count} ${count === 1 ? "input is" : "inputs are"} saved; local AI is unavailable.`;
+    elements.quickCommandStatus.textContent = `已保存 ${count} 条内容，本地 AI 暂不可用。`;
   } else {
-    elements.quickCommandStatus.textContent = `${count} ${count === 1 ? "input is" : "inputs are"} queued; automatic analysis is off.`;
+    elements.quickCommandStatus.textContent = `已暂存 ${count} 条内容，自动分析已关闭。`;
   }
 }
 
@@ -635,14 +635,14 @@ async function refreshQuickBatchStatus() {
     }, {});
     const parts = [];
     const processing = (counts.queued || 0) + (counts.analyzing || 0);
-    if (processing) parts.push(`${processing} ${processing === 1 ? "file" : "files"} analyzing`);
-    if (counts.ready) parts.push(`${counts.ready} ready to apply`);
-    if (counts.needs_review) parts.push(`${counts.needs_review} need${counts.needs_review === 1 ? "s" : ""} review`);
-    if (counts.failed) parts.push(`${counts.failed} failed`);
-    elements.quickCommandStatus.textContent = parts.length ? `${parts.join(" · ")}.` : "This batch is complete.";
+    if (processing) parts.push(`${processing} 条正在分析`);
+    if (counts.ready) parts.push(`${counts.ready} 条可应用`);
+    if (counts.needs_review) parts.push(`${counts.needs_review} 条待审核`);
+    if (counts.failed) parts.push(`${counts.failed} 条失败`);
+    elements.quickCommandStatus.textContent = parts.length ? `${parts.join(" · ")}.` : "本批次已处理完成。";
     if (processing) state.quickBatchTimer = setTimeout(refreshQuickBatchStatus, 1600);
   } catch {
-    elements.quickCommandStatus.textContent = "Batch status is temporarily unavailable.";
+    elements.quickCommandStatus.textContent = "暂时无法获取批次状态。";
   }
 }
 
@@ -678,8 +678,8 @@ function showIntakeAlert(message) {
 
 function intakeErrorMessage(error) {
   const fields = error?.detail?.fields;
-  if (fields && Object.keys(fields).length > 0) return Object.values(fields)[0];
-  return error?.message || "Input could not be saved.";
+  if (fields && Object.keys(fields).length > 0) return WubuZh.error(error.detail);
+  return WubuZh.error(error);
 }
 
 async function refreshIntake() {
@@ -687,28 +687,28 @@ async function refreshIntake() {
     const result = await request("/api/v1/intake?status=pending&limit=6");
     elements.intakeCount.textContent = result.total;
     elements.intakeCount.hidden = result.total === 0;
-    elements.recentIntakeCount.textContent = `${result.total} staged`;
+    elements.recentIntakeCount.textContent = `${result.total} 条待处理`;
     renderRecentIntake(result.entries);
   } catch {
     elements.intakeCount.hidden = true;
     elements.recentIntakeList.replaceChildren();
-    elements.recentIntakeEmpty.textContent = "AI inbox is unavailable.";
+    elements.recentIntakeEmpty.textContent = "AI 收件箱暂不可用。";
     elements.recentIntakeEmpty.hidden = false;
   }
 }
 
 function renderRecentIntake(entries) {
   elements.recentIntakeList.replaceChildren();
-  elements.recentIntakeEmpty.textContent = "No staged inputs yet.";
+  elements.recentIntakeEmpty.textContent = "还没有待处理的内容。";
   elements.recentIntakeEmpty.hidden = entries.length > 0;
   const sourceDetails = {
-    command: ["note_stack", "Text command"],
-    receipt: ["upload_file", "Upload"],
-    purchase_photo: ["upload_file", "Upload"],
-    voice: ["headphones", "Voice input"],
+    command: ["note_stack", "文字指令"],
+    receipt: ["upload_file", "上传文件"],
+    purchase_photo: ["upload_file", "上传文件"],
+    voice: ["headphones", "语音输入"],
   };
   for (const entry of entries) {
-    const [iconName, sourceLabel] = sourceDetails[entry.source] || ["inventory", "Input"];
+    const [iconName, sourceLabel] = sourceDetails[entry.source] || ["inventory", "录入内容"];
     const item = document.createElement("li");
     const icon = document.createElement("span");
     icon.className = "material-symbols";
@@ -717,12 +717,12 @@ function renderRecentIntake(entries) {
     const title = document.createElement("strong");
     title.textContent = sourceLabel;
     const detail = document.createElement("span");
-    detail.textContent = entry.analysis?.summary || entry.text || (entry.attachments.length === 1 ? entry.attachments[0].file_name : "File unavailable");
+    detail.textContent = entry.analysis?.summary || entry.text || (entry.attachments.length === 1 ? entry.attachments[0].file_name : "文件不可用");
     copy.append(title, detail);
     if (entry.analysis) {
       const outcome = document.createElement("span");
       outcome.className = "intake-analysis-state";
-      outcome.textContent = `${entry.analysis.suggestions.length} suggestion${entry.analysis.suggestions.length === 1 ? "" : "s"} · review required`;
+      outcome.textContent = `${entry.analysis.suggestions.length} 条建议 · 待审核`;
       copy.append(outcome);
     }
     const time = document.createElement("time");
@@ -736,7 +736,7 @@ function renderRecentIntake(entries) {
       analyze.dataset.analyzeId = entry.id;
       const busy = state.intakeAnalyzing.has(entry.id);
       analyze.disabled = busy;
-      analyze.textContent = busy ? "Analyzing…" : "Analyze";
+      analyze.textContent = busy ? "正在分析…" : "分析";
       item.append(analyze);
     }
     elements.recentIntakeList.append(item);
@@ -759,7 +759,7 @@ async function analyzeIntakeEntry(id, notify) {
   await refreshIntake();
   try {
     const result = await request(`/api/v1/intake/${encodeURIComponent(id)}/analysis`, { method: "POST" });
-    if (notify) showToast("Inbox item analyzed. Review suggestions before changing inventory.");
+    if (notify) showToast("分析完成，请审核建议后再修改库存。");
     return result;
   } catch (error) {
     if (notify) showToast(intakeErrorMessage(error), true);
@@ -777,12 +777,12 @@ async function runIntakeBulk(action) {
   try {
     const result = await request(`/api/v1/intake/${action}`, { method: "POST" });
     const parts = [];
-    if (result.analyzed) parts.push(`${result.analyzed} analyzed`);
-    if (result.added) parts.push(`${result.added} inventory changes`);
-    if (result.reviewed) parts.push(`${result.reviewed} inbox entries cleared`);
-    if (parts.length === 0) parts.push("nothing to process");
+    if (result.analyzed) parts.push(`已分析 ${result.analyzed} 条`);
+    if (result.added) parts.push(`已应用 ${result.added} 条库存变更`);
+    if (result.reviewed) parts.push(`已清理 ${result.reviewed} 条收件箱内容`);
+    if (parts.length === 0) parts.push("没有待处理的内容");
     const failed = result.failed?.length || 0;
-    showToast(`${parts.join(", ")}.${failed ? ` ${failed} entries need review.` : ""}`, failed > 0);
+    showToast(`${parts.join(", ")}.${failed ? ` ${failed} 条需要审核。` : ""}`, failed > 0);
     await Promise.all([refreshAll(), refreshIntake()]);
   } catch (error) {
     showToast(intakeErrorMessage(error), true);
@@ -803,7 +803,7 @@ async function toggleVoiceRecording() {
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-    showToast("Voice recording is not supported in this browser.", true);
+    showToast("此浏览器不支持录音。", true);
     return;
   }
   try {
@@ -827,8 +827,8 @@ async function toggleVoiceRecording() {
     stopVoiceStream();
     setVoiceUI("idle");
     const message = error?.name === "NotAllowedError"
-      ? "Microphone permission was not granted."
-      : "Voice recording could not start.";
+      ? "未获得麦克风权限。"
+      : "无法开始录音。";
     showToast(message, true);
   }
 }
@@ -840,11 +840,11 @@ async function finishVoiceRecording(recorder) {
   const blob = new Blob(state.voiceChunks, { type: mediaType });
   stopVoiceStream();
   try {
-    if (blob.size === 0) throw new Error("Recording was empty.");
+    if (blob.size === 0) throw new Error("没有录到声音，请重试。");
     const extension = mediaType === "audio/mp4" ? "m4a" : mediaType === "audio/ogg" ? "ogg" : "webm";
     const file = new File([blob], `voice-${new Date().toISOString().replaceAll(":", "-")}.${extension}`, { type: mediaType });
     const added = await submitQuickCapture({ text: "", files: [file], clearOnSuccess: false });
-    if (!added) elements.quickCommandStatus.textContent = "Voice input was not added. Try again.";
+    if (!added) elements.quickCommandStatus.textContent = "语音未添加，请重试。";
   } catch (error) {
     showToast(intakeErrorMessage(error), true);
   } finally {
@@ -864,11 +864,11 @@ function setVoiceUI(mode) {
   const saving = mode === "saving";
   elements.voiceButton.classList.toggle("is-recording", recording);
   elements.voiceButton.setAttribute("aria-pressed", String(recording));
-  elements.voiceButton.setAttribute("aria-label", recording ? "Stop and save voice input" : "Record voice input");
+  elements.voiceButton.setAttribute("aria-label", recording ? "停止并保存语音" : "录制语音");
   elements.voiceButton.disabled = saving;
   elements.quickCommandStatus.classList.toggle("is-recording", recording);
-  if (recording) elements.quickCommandStatus.textContent = "Recording… press microphone again to add it. Maximum 60 seconds.";
-  if (saving) elements.quickCommandStatus.textContent = "Adding voice input to AI inbox…";
+  if (recording) elements.quickCommandStatus.textContent = "正在录音…再次点击麦克风即可保存，最长 60 秒。";
+  if (saving) elements.quickCommandStatus.textContent = "正在将语音添加到 AI 收件箱…";
 }
 
 function formatFileSize(bytes) {
@@ -878,16 +878,16 @@ function formatFileSize(bytes) {
 }
 
 function formatIntakeTime(value) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
 function populateMetadata() {
   for (const category of state.meta.categories) {
-    elements.categoryFilter.append(new Option(category.label, category.value));
-    elements.category.append(new Option(category.label, category.value));
+    elements.categoryFilter.append(new Option(WubuZh.category(category.value), category.value));
+    elements.category.append(new Option(WubuZh.category(category.value), category.value));
   }
-  for (const unit of state.meta.suggested_units) elements.unitSuggestions.append(new Option(unit));
-  for (const location of state.meta.suggested_locations) elements.locationSuggestions.append(new Option(location));
+  for (const unit of state.meta.suggested_units) elements.unitSuggestions.append(new Option(WubuZh.unit(unit)));
+  for (const location of state.meta.suggested_locations) elements.locationSuggestions.append(new Option(WubuZh.location(location)));
   rebuildLocationFilter(state.meta.suggested_locations);
 }
 
@@ -958,16 +958,16 @@ function renderItems() {
   elements.clearFilters.hidden = !filtered;
   elements.emptyAdd.hidden = filtered;
   if (state.items.length === 0 && filtered) {
-    elements.emptyTitle.textContent = "No matching items.";
-    elements.emptyCopy.textContent = "Try a different search or clear the current filters.";
+    elements.emptyTitle.textContent = "没有匹配的物品。";
+    elements.emptyCopy.textContent = "请更换搜索内容或清除筛选条件。";
   } else {
-    elements.emptyTitle.textContent = "Your stockroom is ready.";
-    elements.emptyCopy.textContent = "Add the first thing you keep at home. Coffee, soap, batteries — anything counts.";
+    elements.emptyTitle.textContent = "从第一件物品开始。";
+    elements.emptyCopy.textContent = "咖啡、肥皂、电池……把家中常备的物品记下来吧。";
   }
 
-  const labels = { low: "Low-stock items", out: "Out-of-stock items", expiring: "Expiring items", expired: "Expired items", short_lived: "Use-soon items" };
-  elements.inventoryTitle.textContent = labels[state.filters.status] || (state.filters.search ? "Search results" : "All items");
-  elements.resultCount.textContent = `${state.total} ${state.total === 1 ? "item" : "items"}`;
+  const labels = { low: "需要补货的物品", out: "已用完的物品", expiring: "即将到期的物品", expired: "已过期的物品", short_lived: "需要尽快使用的物品" };
+  elements.inventoryTitle.textContent = labels[state.filters.status] || (state.filters.search ? "搜索结果" : "全部物品");
+  elements.resultCount.textContent = `${state.total} 件物品`;
 }
 
 function buildItemCard(item) {
@@ -975,38 +975,38 @@ function buildItemCard(item) {
   card.dataset.id = item.id;
   card.querySelector(".item-icon").textContent = item.icon;
   card.querySelector(".item-name").textContent = item.name;
-  card.querySelector(".item-edit").setAttribute("aria-label", `Edit ${item.name}`);
+  card.querySelector(".item-edit").setAttribute("aria-label", `编辑 ${item.name}`);
   const shortLivedToggle = card.querySelector(".short-lived-toggle");
   shortLivedToggle.classList.toggle("is-active", item.short_lived);
   shortLivedToggle.setAttribute("aria-pressed", String(item.short_lived));
-  shortLivedToggle.setAttribute("aria-label", item.short_lived ? `Cancel use-soon timer for ${item.name}` : `Mark ${item.name} as use soon`);
-  shortLivedToggle.title = item.short_lived ? "Cancel 7-day timer" : "Use within 7 days";
+  shortLivedToggle.setAttribute("aria-label", item.short_lived ? `取消 ${item.name} 的尽快使用计时` : `将 ${item.name} 标记为尽快使用`);
+  shortLivedToggle.title = item.short_lived ? "取消 7 天计时" : "7 天内使用";
 
-  const category = state.meta.categories.find((entry) => entry.value === item.category)?.label || titleCase(item.category);
-  card.querySelector(".item-meta").textContent = item.location ? `${category} · ${item.location}` : category;
+  const category = WubuZh.category(item.category);
+  card.querySelector(".item-meta").textContent = item.location ? `${category} · ${WubuZh.location(item.location)}` : category;
   card.querySelector(".item-notes").textContent = item.notes;
   card.querySelector(".stock-amount strong").textContent = formatQuantity(item.quantity);
-  card.querySelector(".stock-amount span").textContent = item.unit;
+  card.querySelector(".stock-amount span").textContent = WubuZh.unit(item.unit);
 
   const badges = card.querySelector(".item-badges");
   const status = itemStatus(item);
   if (item.short_lived) {
     addBadge(badges, shortLivedLabel(item), "calendar_month", "short-lived");
-    if (item.quantity > 0) addActionBadge(badges, "Used now", "check", "consume");
+    if (item.quantity > 0) addActionBadge(badges, "已用完", "check", "consume");
   }
-  if (status.expired) addBadge(badges, "Expired", "event", "expired");
+  if (status.expired) addBadge(badges, "已过期", "event", "expired");
   else if (status.expiring) addBadge(badges, expiryLabel(item.expiry_date), "event", "expiring");
-  if (status.out) addBadge(badges, "Out of stock", "block", "out");
-  else if (status.low) addBadge(badges, "Low stock", "low_priority", "low");
+  if (status.out) addBadge(badges, "已用完", "block", "out");
+  else if (status.low) addBadge(badges, "需要补货", "low_priority", "low");
   if (badges.childElementCount === 0 && item.expiry_date) addBadge(badges, formatDate(item.expiry_date), "event", "neutral");
-  if (item.unit_price_cents !== null) addBadge(badges, `${formatCurrency(item.unit_price_cents)} each`, "shopping_bag", "neutral");
+  if (item.unit_price_cents !== null) addBadge(badges, `每${WubuZh.unit(item.unit)} ${formatCurrency(item.unit_price_cents)}`, "shopping_bag", "neutral");
 
   const step = stepFor(item.unit);
   const minus = card.querySelector('[data-adjust="minus"]');
   const plus = card.querySelector('[data-adjust="plus"]');
   minus.disabled = item.quantity <= 0;
-  minus.title = `Decrease by ${formatQuantity(Math.min(step, item.quantity))} ${item.unit}`;
-  plus.title = `Increase by ${formatQuantity(step)} ${item.unit}`;
+  minus.title = `减少 ${formatQuantity(Math.min(step, item.quantity))} ${WubuZh.unit(item.unit)}`;
+  plus.title = `增加 ${formatQuantity(step)} ${WubuZh.unit(item.unit)}`;
   return card;
 }
 
@@ -1048,11 +1048,11 @@ async function handleCardAction(event) {
   const item = state.items.find((entry) => entry.id === card.dataset.id);
   if (!item) return;
   if (event.target.closest('[data-action="toggle-short-lived"]')) {
-    await updateItemLifecycle(item, { short_lived: !item.short_lived }, item.short_lived ? "Use-soon timer cancelled." : "7-day timer started.", card);
+    await updateItemLifecycle(item, { short_lived: !item.short_lived }, item.short_lived ? "已取消尽快使用计时。" : "已开始 7 天计时。", card);
     return;
   }
   if (event.target.closest('[data-action="consume"]')) {
-    await updateItemLifecycle(item, { quantity: 0, clear_auto_consume_at: true }, `${item.name} marked as used.`, card);
+    await updateItemLifecycle(item, { quantity: 0, clear_auto_consume_at: true }, `已将 ${item.name} 标记为用完。`, card);
     return;
   }
   if (event.target.closest('[data-action="edit"]')) {
@@ -1078,7 +1078,7 @@ async function updateItemLifecycle(item, payload, message, card) {
     showToast(message);
     await refreshAll();
   } catch (error) {
-    showToast(error.message, true);
+    showToast(WubuZh.error(error), true);
     renderItems();
   }
 }
@@ -1095,7 +1095,7 @@ async function adjustQuantity(item, delta, card) {
     renderItems();
     refreshSummary();
   } catch (error) {
-    showToast(error.message, true);
+    showToast(WubuZh.error(error), true);
     renderItems();
   }
 }
@@ -1109,16 +1109,16 @@ function openEditor(item = null) {
   elements.chosenIcon.setAttribute("aria-expanded", "false");
   elements.iconSearch.value = "";
 
-  elements.dialogTitle.textContent = item ? "Edit item" : "Add item";
-  elements.dialogEyebrow.textContent = item ? "Update inventory" : "New inventory item";
+  elements.dialogTitle.textContent = item ? "编辑物品" : "添加物品";
+  elements.dialogEyebrow.textContent = item ? "更新库存" : "新增库存物品";
   elements.deleteItem.hidden = !item;
   elements.name.value = item?.name || "";
   elements.category.value = item?.category || "pantry";
   elements.quantity.value = item?.quantity ?? 1;
-  elements.unit.value = item?.unit || "pcs";
+  WubuZh.setEditable(elements.unit, item?.unit || "个", "unit");
   elements.price.value = item?.unit_price_cents === null || item?.unit_price_cents === undefined
     ? "" : (item.unit_price_cents / 100).toFixed(2);
-  elements.location.value = item?.location || "";
+  WubuZh.setEditable(elements.location, item?.location || "", "location");
   elements.threshold.value = item?.low_stock_threshold ?? "";
   elements.expiry.value = item?.expiry_date || "";
   elements.shortLived.checked = item?.short_lived || false;
@@ -1147,9 +1147,9 @@ async function saveEditor(event) {
     category: elements.category.value,
     icon: state.selectedIcon,
     quantity: Number(elements.quantity.value),
-    unit: elements.unit.value,
+    unit: WubuZh.originalValue(elements.unit),
     unit_price_cents: priceBlank ? null : Math.round(Number(elements.price.value) * 100),
-    location: elements.location.value,
+    location: WubuZh.originalValue(elements.location),
     low_stock_threshold: thresholdBlank ? null : Number(elements.threshold.value),
     expiry_date: expiryBlank ? null : elements.expiry.value,
     short_lived: elements.shortLived.checked,
@@ -1168,11 +1168,11 @@ async function saveEditor(event) {
       body: JSON.stringify(payload),
     });
     elements.dialog.close();
-    showToast(state.editingId ? `${item.name} updated.` : `${item.name} added.`);
+    showToast(state.editingId ? `已更新 ${item.name}。` : `已添加 ${item.name}。`);
     await refreshAll();
   } catch (error) {
     if (error.detail?.fields) showFieldErrors(error.detail.fields);
-    elements.formAlert.textContent = error.message;
+    elements.formAlert.textContent = WubuZh.error(error);
     elements.formAlert.hidden = false;
   } finally {
     setSaving(false);
@@ -1194,10 +1194,10 @@ async function deleteCurrentItem() {
     await request(`/api/v1/items/${encodeURIComponent(item.id)}`, { method: "DELETE" });
     elements.confirmDialog.close();
     elements.dialog.close();
-    showToast(`${item.name} deleted.`);
+    showToast(`已删除 ${item.name}。`);
     await refreshAll();
   } catch (error) {
-    showToast(error.message, true);
+    showToast(WubuZh.error(error), true);
   } finally {
     elements.confirmDelete.disabled = false;
   }
@@ -1211,14 +1211,14 @@ function toggleIconPicker() {
 
 function renderIconPicker(search = "") {
   const query = search.trim().toLowerCase();
-  const matches = ICON_NAMES.filter((name) => `${titleCase(name)} ${ICON_KEYWORDS[name] || ""}`.toLowerCase().includes(query));
+  const matches = ICON_NAMES.filter((name) => `${WubuZh.icons[name]} ${titleCase(name)} ${ICON_KEYWORDS[name] || ""}`.toLowerCase().includes(query));
   const fragment = document.createDocumentFragment();
   for (const name of matches) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `icon-option${name === state.selectedIcon ? " is-selected" : ""}`;
-    button.title = titleCase(name);
-    button.setAttribute("aria-label", titleCase(name));
+    button.title = WubuZh.icons[name];
+    button.setAttribute("aria-label", WubuZh.icons[name]);
     const symbol = document.createElement("span");
     symbol.className = "material-symbols";
     symbol.setAttribute("aria-hidden", "true");
@@ -1247,7 +1247,8 @@ function suggestIconFromName() {
   if (state.iconManuallyChosen) return;
   const name = elements.name.value.trim().toLowerCase();
   const match = AUTO_ICON_RULES.find(([pattern]) => pattern.test(name));
-  setSelectedIcon(match?.[1] || categoryIcon(elements.category.value), false);
+  const chineseMatch = ICON_NAMES.find(icon => name.includes(WubuZh.icons[icon]));
+  setSelectedIcon(match?.[1] || chineseMatch || categoryIcon(elements.category.value), false);
 }
 
 function suggestIconFromCategory() {
@@ -1279,7 +1280,7 @@ function showFieldErrors(fields) {
   for (const [name, message] of Object.entries(fields)) {
     const error = document.querySelector(`[data-error-for="${CSS.escape(name)}"]`);
     if (!error) continue;
-    error.textContent = message;
+    error.textContent = WubuZh.fieldMessage(name, message);
     error.closest(".field")?.classList.add("has-error");
   }
 }
@@ -1322,8 +1323,8 @@ function clearAllFilters() {
 function rebuildLocationFilter(locations) {
   const current = elements.locationFilter.value || state.filters.location;
   const unique = [...new Set([...locations, current].filter(Boolean).map((value) => value.trim()))].sort((a, b) => a.localeCompare(b));
-  elements.locationFilter.replaceChildren(new Option("All locations", ""));
-  for (const location of unique) elements.locationFilter.append(new Option(location, location));
+  elements.locationFilter.replaceChildren(new Option("全部位置", ""));
+  for (const location of unique) elements.locationFilter.append(new Option(WubuZh.location(location), location));
   elements.locationFilter.value = current;
 }
 
@@ -1344,7 +1345,7 @@ function showLoadError(error) {
   setLoading(false);
   elements.errorState.hidden = false;
   elements.errorState.style.display = "flex";
-  elements.errorCopy.textContent = error.message || "The server did not respond.";
+  elements.errorCopy.textContent = WubuZh.error(error);
 }
 
 function setLoading(loading) {
@@ -1360,7 +1361,7 @@ function setLoading(loading) {
 function setConnection(online) {
   elements.connectionPill.classList.toggle("is-online", online);
   elements.connectionPill.classList.toggle("is-offline", !online);
-  elements.connectionLabel.textContent = online ? "Local database ready" : "Server unavailable";
+  elements.connectionLabel.textContent = online ? "本地数据库已就绪" : "服务器暂不可用";
 }
 
 function showToast(message, isError = false) {
@@ -1398,23 +1399,23 @@ function daysFromToday(date) {
 
 function expiryLabel(date) {
   const days = daysFromToday(date);
-  if (days === 0) return "Expires today";
-  if (days === 1) return "Expires tomorrow";
-  return `Expires in ${days} days`;
+  if (days === 0) return "今天到期";
+  if (days === 1) return "明天到期";
+  return `${days} 天后到期`;
 }
 
 function shortLivedLabel(item) {
-  if (!item.auto_consume_at) return item.quantity <= 0 ? "Short-lived · out" : "Use soon";
+  if (!item.auto_consume_at) return item.quantity <= 0 ? "短期物品 · 已用完" : "尽快使用";
   const days = Math.max(1, Math.ceil((new Date(item.auto_consume_at) - Date.now()) / 86_400_000));
-  return days === 1 ? "Auto-out tomorrow" : `Auto-out in ${days} days`;
+  return days === 1 ? "明天自动归零" : `${days} 天后自动归零`;
 }
 
 function formatDate(date) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T00:00:00`));
+  return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T00:00:00`));
 }
 
 function formatQuantity(value) {
-  return new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(value);
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(value);
 }
 
 function formatCurrency(cents) {
@@ -1423,8 +1424,8 @@ function formatCurrency(cents) {
 
 function stepFor(unit) {
   const normalized = unit.trim().toLowerCase();
-  if (normalized === "g" || normalized === "ml") return 100;
-  if (normalized === "kg" || normalized === "l") return 0.1;
+  if (["g", "ml", "克", "毫升"].includes(normalized)) return 100;
+  if (["kg", "l", "千克", "升"].includes(normalized)) return 0.1;
   return 1;
 }
 

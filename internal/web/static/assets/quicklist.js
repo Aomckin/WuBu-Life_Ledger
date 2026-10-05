@@ -1,5 +1,7 @@
 "use strict";
 
+const CATALOG_NAMES = ["大米", "意大利面", "面粉", "白糖", "食盐", "燕麦片", "混合麦片", "玉米片", "库斯库斯小米", "布格麦", "扁豆", "干鹰嘴豆", "干豆", "土豆泥粉", "面包糠", "粗粒小麦粉", "食用淀粉", "泡打粉", "香草糖", "干酵母", "可可粉", "糖粉", "巧克力碎", "吉利丁或琼脂", "小苏打", "墨西哥薄饼", "脆面包", "烤面包干", "米饼或玉米饼", "方便面", "蔬菜高汤", "肉高汤", "咖啡粉", "咖啡豆", "咖啡胶囊", "咖啡滤纸", "红茶", "花草茶或果茶", "蜂蜜", "榛子巧克力酱", "果酱", "花生酱", "番茄泥", "番茄块罐头", "番茄膏", "玉米罐头", "豌豆罐头", "红腰豆罐头", "鹰嘴豆罐头", "金枪鱼罐头", "椰奶", "汤或炖菜罐头", "苹果泥", "水果罐头", "腌黄瓜", "橄榄", "罗勒青酱", "意面酱", "番茄酱", "蛋黄酱", "芥末酱", "酱油", "醋", "食用油", "橄榄油", "黑胡椒", "红椒粉", "咖喱粉", "肉桂粉", "香草盐或混合调味料", "薯片", "玉米片零食", "咸饼干", "饼干", "巧克力", "软糖", "麦片能量棒", "坚果", "果干", "爆米花", "冷冻披萨", "冷冻薯条", "冷冻蔬菜", "冷冻水果或莓果", "冷冻鱼", "冷冻肉", "冷冻即食餐", "冰淇淋", "冷冻香草", "制冰袋", "牛奶", "燕麦奶或杏仁奶", "黄油", "植物黄油", "奶酪片", "奶酪块", "奶油奶酪", "酸奶", "凝乳", "奶油", "酸奶油", "鸡蛋", "冷切肉", "火腿或培根", "香肠", "鲜肉", "鲜鱼", "豆腐", "鹰嘴豆泥", "长棍面包或面包", "香蕉", "苹果", "橙子", "柠檬", "土豆", "洋葱", "大蒜", "番茄", "黄瓜", "胡萝卜", "橙汁", "苹果汁", "混合维生素果汁", "可乐或汽水", "能量饮料", "啤酒", "葡萄酒", "起泡酒", "饮料糖浆", "速溶咖啡", "速溶可可饮料", "运动饮料", "冰茶", "乳饮料或蛋白饮品", "盒装饮料", "洗洁精", "洗碗机漂洗剂", "洗碗机专用盐", "通用清洁剂", "浴室清洁剂", "马桶清洁剂", "玻璃清洁剂", "厨房去油剂", "地板清洁剂", "消毒喷雾", "清洁湿巾", "去污乳", "烤箱清洁剂", "管道疏通剂", "除霉剂", "水垢清洁剂", "不锈钢清洁剂", "家具护理剂", "清洁海绵", "锅具清洁球", "清洁手套", "拖把替换布", "吸尘器集尘袋", "吸尘器滤芯", "空气清新剂", "除垢剂", "彩色衣物洗衣粉", "白色衣物洗衣粉", "精细衣物洗涤剂", "去渍剂", "卫生纸", "纸巾", "洗手液", "沐浴露", "洗发水", "护发素", "除臭用品", "牙刷", "牙线", "漱口水", "剃须刀片", "剃须泡沫", "棉签", "化妆棉", "经期用品", "身体乳", "护手霜", "防晒霜", "润唇膏", "创可贴", "伤口消毒液", "绷带敷料", "感冒药", "鼻喷剂", "润喉片", "厨房纸", "小号垃圾袋", "大号垃圾袋", "厨余垃圾袋", "回收垃圾袋", "冷冻保鲜袋", "密封袋", "保鲜膜", "铝箔", "烘焙纸", "牙膏", "衣物柔顺剂", "洗碗机洗涤块", "止痛药", "整箱饮用水", "吐司面包", "冷冻吐司面包", "冷冻面包卷"];
+
 const CATALOG = [
   [1, "Reis", "packs", "pantry", "rice_bowl"],
   [2, "Nudeln/Spaghetti", "packs", "pantry", "ramen_dining"],
@@ -209,19 +211,16 @@ const CATALOG = [
   [206, "Toasti", "packs", "pantry", "bakery_dining"],
   [207, "Toasti TK", "packs", "pantry", "bakery_dining", "Freezer"],
   [208, "TK-Brötchen", "pcs", "pantry", "bakery_dining", "Freezer"],
-].map(([id, name, unit, category, icon, location = ""]) => ({ id, name, unit, category, icon, location }));
+].map(([id, name, unit, category, icon, location = ""]) => ({ id, name: CATALOG_NAMES[id - 1], legacyName: name, unit, category, icon, location }));
 
-const UNIT_LABELS = {
-  packs: "packs", cans: "cans", jars: "jars", bottles: "bottles", pcs: "pcs",
-  bags: "bags", rolls: "rolls", tubes: "tubes", boxes: "boxes",
-  crates: "crates", cups: "cups", sachets: "sachets",
-};
+const UNIT_LABELS = Object.fromEntries(["packs", "cans", "jars", "bottles", "pcs", "bags", "rolls", "tubes", "boxes", "crates", "cups", "sachets"].map(unit => [unit, WubuZh.unit(unit)]));
 
-const CATEGORY_LABELS = {
-  pantry: "Pantry & food", drinks: "Drinks", cleaning: "Cleaning",
-  laundry: "Laundry", bathroom: "Bathroom & care", health: "Health",
-  household: "Household",
-};
+const CATEGORY_LABELS = Object.fromEntries(["pantry", "drinks", "cleaning", "laundry", "bathroom", "health", "household"].map(category => [category, WubuZh.category(category)]));
+
+// Old catalogs used German names. Match both names and only update quantities.
+function existingItem(map, definition) {
+  return map.get(normalize(definition.name)) || map.get(normalize(definition.legacyName));
+}
 
 const state = {
   existingByName: new Map(),
@@ -265,7 +264,7 @@ function roundQuantity(value) {
 }
 
 function formatQuantity(value) {
-  return new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(value);
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(value);
 }
 
 async function request(path, options = {}) {
@@ -275,22 +274,22 @@ async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers });
   if (response.status === 204) return null;
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+  if (!response.ok) throw new Error(WubuZh.error(data?.error, response.status));
   return data;
 }
 
 async function initialize() {
   if (CATALOG.length !== 208 || new Set(CATALOG.map((item) => item.id)).size !== CATALOG.length) {
-    throw new Error("The Quicklist catalogue is invalid.");
+    throw new Error("快速盘点目录无效。");
   }
   bindEvents();
   renderCatalog();
   try {
     await loadInventory();
-    elements.loadStatus.textContent = "Current inventory loaded.";
+    elements.loadStatus.textContent = "已加载当前库存。";
   } catch (error) {
-    elements.loadStatus.textContent = `Inventory unavailable: ${error.message}`;
-    showToast("The current inventory could not be loaded.");
+    elements.loadStatus.textContent = `库存暂不可用：${WubuZh.error(error)}`;
+    showToast("无法加载当前库存。");
   }
 }
 
@@ -315,7 +314,7 @@ function renderCatalog() {
     const row = elements.template.content.firstElementChild.cloneNode(true);
     row.dataset.id = definition.id;
     row.dataset.category = definition.category;
-    row.dataset.search = normalize(`${definition.name} ${CATEGORY_LABELS[definition.category]}`);
+    row.dataset.search = normalize(`${definition.name} ${definition.legacyName} ${CATEGORY_LABELS[definition.category]}`);
     row.querySelector(".item-id").textContent = definition.id;
     row.querySelector(".item-icon").textContent = definition.icon;
     row.querySelector(".item-copy strong").textContent = definition.name;
@@ -324,8 +323,8 @@ function renderCatalog() {
     const number = row.querySelector(".number-input");
     range.dataset.id = definition.id;
     number.dataset.id = definition.id;
-    range.setAttribute("aria-label", `${definition.name} quantity slider`);
-    number.setAttribute("aria-label", `${definition.name} exact quantity`);
+    range.setAttribute("aria-label", `${definition.name}数量滑块`);
+    number.setAttribute("aria-label", `${definition.name}准确数量`);
     number.value = "0";
     row.querySelector(".number-wrap small").textContent = UNIT_LABELS[definition.unit];
     state.rows.set(definition.id, row);
@@ -342,7 +341,7 @@ async function loadInventory() {
   state.existingByName = new Map(result.items.map((item) => [normalize(item.name), item]));
   state.dirty.clear();
   for (const definition of CATALOG) {
-    const existing = state.existingByName.get(normalize(definition.name));
+    const existing = existingItem(state.existingByName, definition);
     const quantity = existing?.quantity ?? 0;
     state.baseline.set(definition.id, quantity);
     state.values.set(definition.id, quantity);
@@ -361,7 +360,7 @@ function handleQuantityInput(event) {
   const baseline = state.baseline.get(id) ?? 0;
   if (Math.abs(value - baseline) < 0.0005) state.dirty.delete(id);
   else state.dirty.add(id);
-  updateRow(id, value, state.dirty.has(id), state.existingByName.has(normalize(CATALOG[id - 1].name)));
+  updateRow(id, value, state.dirty.has(id), Boolean(existingItem(state.existingByName, CATALOG[id - 1])));
   updateSummary();
   applyFilters();
 }
@@ -377,7 +376,7 @@ function updateRow(id, value, dirty, exists) {
   row.classList.toggle("is-dirty", dirty);
   const definition = CATALOG[id - 1];
   row.querySelector(".item-copy span").textContent = exists
-    ? `${CATEGORY_LABELS[definition.category]} · currently ${formatQuantity(state.baseline.get(id))} ${UNIT_LABELS[definition.unit]}`
+    ? `${CATEGORY_LABELS[definition.category]} · 当前 ${formatQuantity(state.baseline.get(id))} ${UNIT_LABELS[definition.unit]}`
     : `${CATEGORY_LABELS[definition.category]} · ${UNIT_LABELS[definition.unit]}`;
 }
 
@@ -394,7 +393,7 @@ function applyFilters() {
     row.classList.toggle("is-hidden", !matches);
     if (matches) visible += 1;
   }
-  elements.visibleCount.textContent = `${visible} ${visible === 1 ? "item" : "items"}`;
+  elements.visibleCount.textContent = `${visible} 件物品`;
   elements.empty.hidden = visible !== 0;
 }
 
@@ -404,15 +403,15 @@ function updateSummary() {
   let updated = 0;
   let zeroed = 0;
   for (const entry of changes) {
-    const exists = state.existingByName.has(normalize(entry.name));
+    const exists = Boolean(existingItem(state.existingByName, entry));
     if (!exists && entry.quantity > 0) created += 1;
     else if (exists && entry.quantity === 0) zeroed += 1;
     else if (exists) updated += 1;
   }
-  elements.changedCount.textContent = `${changes.length} changed`;
+  elements.changedCount.textContent = `已修改 ${changes.length} 件`;
   elements.quantityTotal.textContent = changes.length === 0
-    ? "No changes yet"
-    : `${created} new · ${updated} adjusted · ${zeroed} set to 0`;
+    ? "尚未修改"
+    : `新增 ${created} 件 · 调整 ${updated} 件 · 归零 ${zeroed} 件`;
   elements.previewButton.disabled = changes.length === 0 || state.busy;
   elements.reset.disabled = changes.length === 0 || state.busy;
 }
@@ -429,7 +428,7 @@ function resetChanges() {
     const value = state.baseline.get(id) ?? 0;
     state.values.set(id, value);
     const definition = CATALOG[id - 1];
-    updateRow(id, value, false, state.existingByName.has(normalize(definition.name)));
+    updateRow(id, value, false, Boolean(existingItem(state.existingByName, definition)));
   }
   state.dirty.clear();
   updateSummary();
@@ -462,7 +461,7 @@ function openPreview() {
   elements.result.hidden = true;
   elements.result.classList.remove("is-error");
   elements.importButton.disabled = false;
-  elements.importButton.textContent = "Import into Stockroom";
+  elements.importButton.textContent = "导入物簿";
   elements.dialog.showModal();
 }
 
@@ -480,7 +479,7 @@ async function importChanges() {
     const latest = await request("/api/v1/items?limit=500");
     const currentByName = new Map(latest.items.map((item) => [normalize(item.name), item]));
     const jobs = changes.map((definition) => async () => {
-      const existing = currentByName.get(normalize(definition.name));
+      const existing = existingItem(currentByName, definition);
       if (existing) {
         await request(`/api/v1/items/${encodeURIComponent(existing.id)}`, {
           method: "PATCH",
@@ -510,22 +509,22 @@ async function importChanges() {
     }
     const failures = outcomes.filter((outcome) => outcome.status === "rejected");
     if (failures.length > 0) {
-      throw new Error(`${failures.length} of ${outcomes.length} items could not be saved.`);
+      throw new Error(`${outcomes.length} 件物品中有 ${failures.length} 件未能保存，请重试。`);
     }
     const created = outcomes.filter((outcome) => outcome.value === "created").length;
     const updated = outcomes.filter((outcome) => outcome.value === "updated").length;
     await loadInventory();
-    elements.result.textContent = `${created} created, ${updated} updated.`;
+    elements.result.textContent = `已新增 ${created} 件，更新 ${updated} 件。`;
     elements.result.hidden = false;
-    elements.importButton.textContent = "Imported";
+    elements.importButton.textContent = "已导入";
     elements.importButton.disabled = true;
-    showToast("Quicklist imported successfully.");
+    showToast("快速盘点结果已导入。");
     setTimeout(() => elements.dialog.close(), 700);
   } catch (error) {
-    elements.result.textContent = error.message;
+    elements.result.textContent = WubuZh.error(error);
     elements.result.classList.add("is-error");
     elements.result.hidden = false;
-    elements.importButton.textContent = "Try again";
+    elements.importButton.textContent = "重试";
   } finally {
     setBusy(false);
   }
@@ -536,7 +535,7 @@ function setBusy(busy) {
   elements.importButton.disabled = busy;
   elements.cancelPreview.disabled = busy;
   elements.closePreview.disabled = busy;
-  elements.importButton.textContent = busy ? "Saving…" : elements.importButton.textContent;
+  elements.importButton.textContent = busy ? "正在保存…" : elements.importButton.textContent;
   updateSummary();
 }
 

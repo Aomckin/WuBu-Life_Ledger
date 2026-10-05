@@ -1,20 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="A calm, private household inventory.">
+  <meta name="description" content="轻松管理家庭库存，数据私密保存在本地。">
   <title>物簿 · 库存编辑</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/app.css?v=1">
-  <script src="/assets/app.js?v=1" defer></script>
+  <link rel="stylesheet" href="/assets/app.css?v=zh-1">
+  <script src="/assets/zh.js?v=zh-1" defer></script><script src="/assets/app.js?v=zh-1" defer></script>
 </head>
 <body>
-  <a class="skip-link" href="#inventory">Skip to inventory</a>
+  <a class="skip-link" href="#inventory">跳到库存列表</a>
 
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Stockroom home">
+    <a class="brand" href="/" aria-label="物簿首页">
       <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
       <span>
         <strong>物簿</strong>
@@ -24,16 +24,16 @@
     <div class="topbar-actions">
       <span class="connection-pill" id="connection-pill" aria-live="polite">
         <span class="connection-dot"></span>
-        <span id="connection-label">Connecting</span>
+        <span id="connection-label">正在连接</span>
       </span>
       <a class="button button-secondary button-ai" id="open-intake" href="/inbox">
         <span class="material-symbols" aria-hidden="true">photo_camera</span>
-        库存 Intake
+        库存收件箱
         <span class="intake-count" id="intake-count" hidden>0</span>
       </a>
       <button class="button button-primary" id="add-item" type="button">
         <span class="material-symbols" aria-hidden="true">add</span>
-        Add item
+        添加物品
       </button>
     </div>
   </header>
@@ -41,56 +41,56 @@
   <main class="page-shell">
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">Your household, accounted for</p>
-        <h1 id="page-title">Know what you have.</h1>
-        <p class="hero-copy">Track everyday supplies without turning your home into a spreadsheet.</p>
+        <p class="eyebrow">家中物品，心中有数</p>
+        <h1 id="page-title">家里有什么，一目了然。</h1>
+        <p class="hero-copy">轻松记录日常用品，让每一份库存都有数。</p>
       </div>
-      <p class="shortcut-hint"><kbd>N</kbd> new item <span></span> <kbd>/</kbd> search</p>
+      <p class="shortcut-hint"><kbd>N</kbd> 添加物品 <span></span> <kbd>/</kbd> 搜索</p>
     </section>
 
     <section class="quick-command ai-capture" aria-labelledby="quick-command-title">
       <span class="quick-command-icon material-symbols" aria-hidden="true">photo_camera</span>
       <div class="quick-command-copy">
-        <strong id="quick-command-title">Capture for AI inbox</strong>
-        <span id="quick-command-status" aria-live="polite">Add text, record a voice note, or drop up to 10 files.</span>
-        <a class="quick-command-batch" id="quick-command-batch" href="/inbox" hidden>Open this batch <span class="quick-command-batch-arrow" aria-hidden="true">→</span></a>
+        <strong id="quick-command-title">录入 AI 收件箱</strong>
+        <span id="quick-command-status" aria-live="polite">输入文字、录制语音，或上传最多 10 个文件。</span>
+        <a class="quick-command-batch" id="quick-command-batch" href="/inbox" hidden>查看本批次 <span class="quick-command-batch-arrow" aria-hidden="true">→</span></a>
       </div>
       <form class="quick-command-form" id="quick-command-form">
         <input class="sr-only" id="quick-command-files" type="file" accept="image/*,audio/*,video/*,application/pdf" multiple>
         <label class="quick-command-drop" id="quick-command-drop" for="quick-command-files">
           <span class="quick-command-upload-symbol" aria-hidden="true">+</span>
-          <span><strong>Drop files or choose</strong><small>Images, PDFs, audio, or video · 10 files / 250 MB</small></span>
+          <span><strong>拖入或选择文件</strong><small>图片、PDF、音频或视频 · 最多 10 个文件 / 共 250 MB</small></span>
         </label>
-        <label class="sr-only" for="quick-command-input">Optional context for this batch</label>
-        <textarea id="quick-command-input" maxlength="100000" rows="3" placeholder="Optional context — e.g. weekly shop, pack sizes, or what changed"></textarea>
+        <label class="sr-only" for="quick-command-input">本批次的补充说明（选填）</label>
+        <textarea id="quick-command-input" maxlength="100000" rows="3" placeholder="补充说明（选填），例如本周采购、包装规格或库存变化"></textarea>
         <div class="quick-command-actions">
-        <button class="voice-button" id="voice-button" type="button" aria-label="Record voice input" aria-pressed="false">
+        <button class="voice-button" id="voice-button" type="button" aria-label="录制语音" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Zm-1.8-9.5a1.8 1.8 0 1 1 3.6 0v6a1.8 1.8 0 1 1-3.6 0V6Zm7.55 5.15a.85.85 0 0 0-1.7 0V12a4.05 4.05 0 0 1-8.1 0v-.85a.85.85 0 0 0-1.7 0V12a5.76 5.76 0 0 0 4.9 5.69v1.61H9.2a.85.85 0 1 0 0 1.7h5.6a.85.85 0 1 0 0-1.7h-1.95v-1.61a5.76 5.76 0 0 0 4.9-5.69v-.85Z"/></svg>
         </button>
         <button class="button button-primary quick-command-save" id="quick-command-save" type="submit">
-          Add and analyze
+          添加并分析
         </button>
         </div>
         <div class="quick-command-file-list" id="quick-command-file-list" aria-live="polite"></div>
       </form>
     </section>
 
-    <section class="metrics" aria-label="Inventory summary">
+    <section class="metrics" aria-label="库存概览">
       <button class="metric-card metric-tracked is-active" type="button" data-summary-filter="">
         <span class="metric-icon material-symbols" aria-hidden="true">inventory_2</span>
-        <span class="metric-copy"><strong id="metric-tracked">—</strong><small>Tracked items</small></span>
+        <span class="metric-copy"><strong id="metric-tracked">—</strong><small>在册物品</small></span>
       </button>
       <button class="metric-card" type="button" data-summary-filter="low">
         <span class="metric-icon material-symbols" aria-hidden="true">low_priority</span>
-        <span class="metric-copy"><strong id="metric-low">—</strong><small>Low stock</small></span>
+        <span class="metric-copy"><strong id="metric-low">—</strong><small>需要补货</small></span>
       </button>
       <button class="metric-card" type="button" data-summary-filter="expiring">
         <span class="metric-icon material-symbols" aria-hidden="true">calendar_month</span>
-        <span class="metric-copy"><strong id="metric-expiring">—</strong><small>Expiring in 30 days</small></span>
+        <span class="metric-copy"><strong id="metric-expiring">—</strong><small>30 天内到期</small></span>
       </button>
       <button class="metric-card" type="button" data-summary-filter="out">
         <span class="metric-icon material-symbols" aria-hidden="true">block</span>
-        <span class="metric-copy"><strong id="metric-out">—</strong><small>Out of stock</small></span>
+        <span class="metric-copy"><strong id="metric-out">—</strong><small>已用完</small></span>
       </button>
       <article class="metric-card metric-value">
         <span class="metric-icon" aria-hidden="true">
@@ -100,7 +100,7 @@
             <circle cx="12" cy="12" r="2.5"></circle>
           </svg>
         </span>
-        <span class="metric-copy"><strong id="metric-value">—</strong><small>Inventory value</small></span>
+        <span class="metric-copy"><strong id="metric-value">—</strong><small>库存价值</small></span>
       </article>
     </section>
 
@@ -108,51 +108,51 @@
       <div class="inventory-toolbar">
         <div class="search-wrap">
           <span class="material-symbols" aria-hidden="true">search</span>
-          <label class="sr-only" for="search">Search inventory</label>
-          <input id="search" type="search" placeholder="Search items or notes…" autocomplete="off">
-          <button class="clear-search" id="clear-search" type="button" aria-label="Clear search" hidden>
+          <label class="sr-only" for="search">搜索库存</label>
+          <input id="search" type="search" placeholder="搜索物品或备注…" autocomplete="off">
+          <button class="clear-search" id="clear-search" type="button" aria-label="清空搜索" hidden>
             <span class="material-symbols" aria-hidden="true">close</span>
           </button>
         </div>
         <label class="availability-filter">
           <input id="show-out-of-stock" type="checkbox">
-          <span>Show out of stock</span>
+          <span>显示已用完物品</span>
         </label>
         <div class="filter-row">
           <label class="select-wrap">
-            <span class="sr-only">Category</span>
-            <select id="category-filter"><option value="">All categories</option></select>
+            <span class="sr-only">分类</span>
+            <select id="category-filter"><option value="">全部分类</option></select>
             <span class="material-symbols" aria-hidden="true">keyboard_arrow_down</span>
           </label>
           <label class="select-wrap">
-            <span class="sr-only">Location</span>
-            <select id="location-filter"><option value="">All locations</option></select>
+            <span class="sr-only">存放位置</span>
+            <select id="location-filter"><option value="">全部位置</option></select>
             <span class="material-symbols" aria-hidden="true">keyboard_arrow_down</span>
           </label>
           <button class="button button-quiet mobile-filter-button" id="mobile-filter-button" type="button">
             <span class="material-symbols" aria-hidden="true">filter_alt</span>
-            Filters
+            筛选
           </button>
         </div>
       </div>
 
-      <div class="status-tabs" role="group" aria-label="Stock status">
-        <button class="status-tab is-active" type="button" data-status="">All</button>
-        <button class="status-tab" type="button" data-status="low">Low stock</button>
-        <button class="status-tab" type="button" data-status="out">Out</button>
-        <button class="status-tab" type="button" data-status="expiring">Expiring</button>
-        <button class="status-tab" type="button" data-status="expired">Expired</button>
-        <button class="status-tab status-tab-short-lived" type="button" data-status="short_lived">Use soon</button>
+      <div class="status-tabs" role="group" aria-label="库存状态">
+        <button class="status-tab is-active" type="button" data-status="">全部</button>
+        <button class="status-tab" type="button" data-status="low">需要补货</button>
+        <button class="status-tab" type="button" data-status="out">已用完</button>
+        <button class="status-tab" type="button" data-status="expiring">即将到期</button>
+        <button class="status-tab" type="button" data-status="expired">已过期</button>
+        <button class="status-tab status-tab-short-lived" type="button" data-status="short_lived">尽快使用</button>
       </div>
 
       <div class="inventory-heading">
         <div>
-          <h2 id="inventory-title">All items</h2>
-          <p id="result-count" aria-live="polite">Loading inventory…</p>
+          <h2 id="inventory-title">全部物品</h2>
+          <p id="result-count" aria-live="polite">正在加载库存…</p>
         </div>
         <button class="button button-quiet" id="refresh" type="button">
           <span class="material-symbols" aria-hidden="true">refresh</span>
-          Refresh
+          刷新
         </button>
       </div>
 
@@ -163,19 +163,19 @@
 
       <div class="empty-state" id="empty-state" hidden>
         <span class="empty-icon material-symbols" aria-hidden="true">inventory_2</span>
-        <h3 id="empty-title">Your stockroom is ready.</h3>
-        <p id="empty-copy">Add the first thing you keep at home. Coffee, soap, batteries — anything counts.</p>
+        <h3 id="empty-title">从第一件物品开始。</h3>
+        <p id="empty-copy">咖啡、肥皂、电池……把家中常备的物品记下来吧。</p>
         <button class="button button-primary" id="empty-add" type="button">
           <span class="material-symbols" aria-hidden="true">add</span>
-          Add first item
+          添加第一件物品
         </button>
-        <button class="button button-secondary" id="clear-filters" type="button" hidden>Clear filters</button>
+        <button class="button button-secondary" id="clear-filters" type="button" hidden>清除筛选</button>
       </div>
 
       <div class="error-state" id="error-state" hidden>
         <span class="material-symbols" aria-hidden="true">cloud_off</span>
-        <div><h3>Could not load inventory</h3><p id="error-copy">The server did not respond.</p></div>
-        <button class="button button-secondary" id="retry" type="button">Try again</button>
+        <div><h3>无法加载库存</h3><p id="error-copy">服务器未响应，请稍后重试。</p></div>
+        <button class="button button-secondary" id="retry" type="button">重试</button>
       </div>
     </section>
   </main>
@@ -183,9 +183,9 @@
   <footer class="footer">
     <span>物簿将数据保存在本地 SQLite；购买请从账簿首页记录，以同步费用与历史。</span>
     <span class="footer-links">
-      <a href="/api/v1" target="_blank" rel="noreferrer">API</a>
-      <a href="/api/v1/openapi.json" target="_blank" rel="noreferrer">OpenAPI</a>
-      <a href="/healthz" target="_blank" rel="noreferrer">Health</a>
+      <a href="/api/v1" target="_blank" rel="noreferrer">接口说明</a>
+      <a href="/api/v1/openapi.json" target="_blank" rel="noreferrer">接口文档</a>
+      <a href="/healthz" target="_blank" rel="noreferrer">健康检查</a>
     </span>
   </footer>
 
@@ -193,10 +193,10 @@
     <form id="item-form" method="dialog" novalidate>
       <div class="dialog-header">
         <div>
-          <p class="eyebrow" id="dialog-eyebrow">Inventory item</p>
-          <h2 id="dialog-title">Add item</h2>
+          <p class="eyebrow" id="dialog-eyebrow">库存物品</p>
+          <h2 id="dialog-title">添加物品</h2>
         </div>
-        <button class="icon-button" id="close-dialog" type="button" aria-label="Close">
+        <button class="icon-button" id="close-dialog" type="button" aria-label="关闭">
           <span class="material-symbols" aria-hidden="true">close</span>
         </button>
       </div>
@@ -206,29 +206,29 @@
         <input id="item-id" type="hidden">
 
         <div class="identity-row">
-          <button class="chosen-icon" id="chosen-icon" type="button" aria-label="Choose item icon" aria-expanded="false">
+          <button class="chosen-icon" id="chosen-icon" type="button" aria-label="选择物品图标" aria-expanded="false">
             <span class="material-symbols" id="chosen-icon-symbol" aria-hidden="true">inventory_2</span>
             <span class="material-symbols chosen-icon-edit" aria-hidden="true">edit</span>
           </button>
           <label class="field grow">
-            <span>Name <b aria-hidden="true">*</b></span>
-            <input id="item-name" name="name" maxlength="80" placeholder="e.g. Dish soap" autocomplete="off" required>
+            <span>名称 <b aria-hidden="true">*</b></span>
+            <input id="item-name" name="name" maxlength="80" placeholder="例如：洗洁精" autocomplete="off" required>
             <small class="field-error" data-error-for="name"></small>
           </label>
         </div>
 
-        <section class="icon-picker" id="icon-picker" hidden aria-label="Choose an icon">
+        <section class="icon-picker" id="icon-picker" hidden aria-label="选择图标">
           <div class="icon-search-wrap">
             <span class="material-symbols" aria-hidden="true">search</span>
-            <input id="icon-search" type="search" placeholder="Search 130+ household icons…" autocomplete="off">
+            <input id="icon-search" type="search" placeholder="搜索 130 多种日常物品图标…" autocomplete="off">
           </div>
           <div class="icon-grid" id="icon-grid"></div>
-          <p class="icon-empty" id="icon-empty" hidden>No matching icon.</p>
+          <p class="icon-empty" id="icon-empty" hidden>没有匹配的图标。</p>
         </section>
 
         <div class="form-grid">
           <label class="field">
-            <span>Category</span>
+            <span>分类</span>
             <span class="select-field">
               <select id="item-category" name="category"></select>
               <span class="material-symbols" aria-hidden="true">keyboard_arrow_down</span>
@@ -236,46 +236,46 @@
             <small class="field-error" data-error-for="category"></small>
           </label>
           <label class="field">
-            <span>Location</span>
-            <input id="item-location" name="location" maxlength="60" list="location-suggestions" placeholder="e.g. Utility closet">
+            <span>存放位置</span>
+            <input id="item-location" name="location" maxlength="60" list="location-suggestions" placeholder="例如：储物柜">
             <small class="field-error" data-error-for="location"></small>
           </label>
           <label class="field">
-            <span>Quantity <b aria-hidden="true">*</b></span>
+            <span>数量 <b aria-hidden="true">*</b></span>
             <input id="item-quantity" name="quantity" type="number" min="0" max="1000000000" step="any" value="1" required>
             <small class="field-error" data-error-for="quantity"></small>
           </label>
           <label class="field">
-            <span>Unit</span>
-            <input id="item-unit" name="unit" maxlength="20" list="unit-suggestions" value="pcs" placeholder="pcs">
+            <span>单位</span>
+            <input id="item-unit" name="unit" maxlength="20" list="unit-suggestions" value="个" placeholder="个">
             <small class="field-error" data-error-for="unit"></small>
           </label>
           <label class="field">
-            <span>Unit price <small>optional</small></span>
+            <span>单价（元） <small>选填</small></span>
             <input id="item-price" name="unit_price" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="0.00">
-            <small>CNY 元 / 库存单位。</small>
+            <small>人民币元 / 库存单位。</small>
             <small class="field-error" data-error-for="unit_price_cents"></small>
           </label>
           <label class="field">
-            <span>Low-stock alert</span>
-            <input id="item-threshold" name="low_stock_threshold" type="number" min="0" max="1000000000" step="any" placeholder="Optional">
-            <small>Flag item at or below this amount.</small>
+            <span>补货提醒阈值</span>
+            <input id="item-threshold" name="low_stock_threshold" type="number" min="0" max="1000000000" step="any" placeholder="选填">
+            <small>数量小于或等于此值时提醒补货。</small>
             <small class="field-error" data-error-for="low_stock_threshold"></small>
           </label>
           <label class="field">
-            <span>Expiry date</span>
+            <span>到期日期</span>
             <input id="item-expiry" name="expiry_date" type="date">
-            <small>Optional; date only.</small>
+            <small>选填，仅填写日期。</small>
             <small class="field-error" data-error-for="expiry_date"></small>
           </label>
           <label class="short-lived-field field-wide">
             <input id="item-short-lived" name="short_lived" type="checkbox">
             <span class="short-lived-check material-symbols" aria-hidden="true">check</span>
-            <span><strong>Use soon</strong><small>Automatically set quantity to 0 after 7 days. You can cancel or use it sooner from the item card.</small></span>
+            <span><strong>尽快使用</strong><small>7 天后自动将数量归零；可在物品卡片上取消计时或提前标记用完。</small></span>
           </label>
           <label class="field field-wide">
-            <span>Notes</span>
-            <textarea id="item-notes" name="notes" maxlength="500" rows="3" placeholder="Brand, size, or anything useful later"></textarea>
+            <span>备注</span>
+            <textarea id="item-notes" name="notes" maxlength="500" rows="3" placeholder="品牌、规格或其他补充信息"></textarea>
             <small class="field-error" data-error-for="notes"></small>
           </label>
         </div>
@@ -284,12 +284,12 @@
       <div class="dialog-footer">
         <button class="button button-danger-quiet" id="delete-item" type="button" hidden>
           <span class="material-symbols" aria-hidden="true">delete</span>
-          Delete
+          删除
         </button>
         <span class="dialog-spacer"></span>
-        <button class="button button-secondary" id="cancel-dialog" type="button">Cancel</button>
+        <button class="button button-secondary" id="cancel-dialog" type="button">取消</button>
         <button class="button button-primary" id="save-item" type="submit">
-          <span class="button-label">Save item</span>
+          <span class="button-label">保存物品</span>
           <span class="button-spinner" aria-hidden="true"></span>
         </button>
       </div>
@@ -300,10 +300,10 @@
     <form id="intake-form" novalidate>
       <div class="dialog-header">
         <div>
-          <p class="eyebrow">Staging only</p>
-          <h2 id="intake-title">AI inbox</h2>
+          <p class="eyebrow">暂存待审核</p>
+          <h2 id="intake-title">AI 收件箱</h2>
         </div>
-        <button class="icon-button" id="close-intake" type="button" aria-label="Close AI inbox">
+        <button class="icon-button" id="close-intake" type="button" aria-label="关闭 AI 收件箱">
           <span class="material-symbols" aria-hidden="true">close</span>
         </button>
       </div>
@@ -311,45 +311,45 @@
       <div class="dialog-body intake-body">
         <div class="intake-notice">
           <span class="material-symbols" aria-hidden="true">inventory</span>
-          <div><strong>Save first, then process entire inbox.</strong><span>Choose Analyze all, Add all, or Analyze and add all. Stock changes only with an add action.</span></div>
+          <div><strong>先保存，再处理收件箱。</strong><span>可选择全部分析、全部添加或分析后添加；仅在确认添加时修改库存。</span></div>
         </div>
 
         <input class="sr-only" id="intake-files" type="file" accept="image/*,audio/*,video/*,application/pdf">
         <label class="upload-zone" id="upload-zone" for="intake-files">
           <span class="material-symbols" aria-hidden="true">upload_file</span>
-          <strong>Choose one file or drop it here</strong>
-          <span>Receipt, image, audio, PDF, or short video · maximum 100 MB</span>
+          <strong>选择一个文件，或拖到这里</strong>
+          <span>小票、图片、音频、PDF 或短视频 · 最大 100 MB</span>
         </label>
         <div class="upload-list" id="upload-list" aria-live="polite"></div>
         <div class="form-alert" id="intake-alert" role="alert" hidden></div>
 
         <label class="field intake-note">
-          <span>Context <small>optional</small></span>
-          <textarea id="intake-text" maxlength="100000" rows="5" placeholder="Shop, date, unusual pack sizes, or a complete shopping list"></textarea>
+          <span>补充说明 <small>选填</small></span>
+          <textarea id="intake-text" maxlength="100000" rows="5" placeholder="商店、日期、包装规格或完整购物清单"></textarea>
         </label>
 
         <div class="clarification-note">
           <span class="material-symbols" aria-hidden="true">note_stack</span>
-          <p><strong>Temporary by design</strong><span>The original file expires after 24 hours or is deleted when marked reviewed. Analysis stays review-only.</span></p>
+          <p><strong>原文件仅临时保存</strong><span>原文件在 24 小时后到期，或在完成审核时删除。分析结果需确认后应用。</span></p>
         </div>
 
         <section class="recent-intake" aria-labelledby="recent-intake-title">
-          <div><h3 id="recent-intake-title">Inbox results</h3><span id="recent-intake-count">0 staged</span></div>
-          <div class="intake-bulk-actions" aria-label="Inbox bulk actions">
-            <button class="button button-secondary" id="analyze-all-intake" type="button">Analyze all</button>
-            <button class="button button-secondary" id="add-all-intake" type="button">Add all</button>
-            <button class="button button-primary" id="analyze-add-all-intake" type="button">Analyze and add all</button>
+          <div><h3 id="recent-intake-title">收件箱结果</h3><span id="recent-intake-count">0 条待处理</span></div>
+          <div class="intake-bulk-actions" aria-label="收件箱批量操作">
+            <button class="button button-secondary" id="analyze-all-intake" type="button">全部分析</button>
+            <button class="button button-secondary" id="add-all-intake" type="button">全部添加</button>
+            <button class="button button-primary" id="analyze-add-all-intake" type="button">全部分析并添加</button>
           </div>
           <ul id="recent-intake-list"></ul>
-          <p id="recent-intake-empty">No staged inputs yet.</p>
+          <p id="recent-intake-empty">还没有待处理的内容。</p>
         </section>
       </div>
 
       <div class="dialog-footer">
         <span class="dialog-spacer"></span>
-        <button class="button button-secondary" id="cancel-intake" type="button">Cancel</button>
+        <button class="button button-secondary" id="cancel-intake" type="button">取消</button>
         <button class="button button-primary" id="save-intake" type="submit">
-          <span class="button-label">Save to inbox</span>
+          <span class="button-label">保存到收件箱</span>
           <span class="button-spinner" aria-hidden="true"></span>
         </button>
       </div>
@@ -359,11 +359,11 @@
   <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
     <form method="dialog">
       <span class="confirm-icon material-symbols" aria-hidden="true">delete</span>
-      <h2 id="confirm-title">Delete item?</h2>
-      <p><strong id="confirm-name"></strong> will be permanently removed from your inventory.</p>
+      <h2 id="confirm-title">删除这件物品？</h2>
+      <p><strong id="confirm-name"></strong> 将从库存中永久删除。</p>
       <div class="confirm-actions">
-        <button class="button button-secondary" id="cancel-delete" type="button">Keep item</button>
-        <button class="button button-danger" id="confirm-delete" type="button">Delete item</button>
+        <button class="button button-secondary" id="cancel-delete" type="button">保留物品</button>
+        <button class="button button-danger" id="confirm-delete" type="button">删除物品</button>
       </div>
     </form>
   </dialog>
@@ -381,10 +381,10 @@
           <p class="item-meta"></p>
         </div>
         <div class="item-card-actions">
-          <button class="icon-button short-lived-toggle" type="button" data-action="toggle-short-lived" aria-label="Mark as use soon" aria-pressed="false">
+          <button class="icon-button short-lived-toggle" type="button" data-action="toggle-short-lived" aria-label="标记为尽快使用" aria-pressed="false">
             <span class="material-symbols" aria-hidden="true">calendar_month</span>
           </button>
-          <button class="icon-button item-edit" type="button" data-action="edit" aria-label="Edit item">
+          <button class="icon-button item-edit" type="button" data-action="edit" aria-label="编辑物品">
             <span class="material-symbols" aria-hidden="true">more_horiz</span>
           </button>
         </div>
@@ -393,9 +393,9 @@
       <p class="item-notes"></p>
       <div class="item-card-bottom">
         <div class="stock-amount"><strong></strong><span></span></div>
-        <div class="stepper" aria-label="Adjust quantity">
-          <button type="button" data-adjust="minus" aria-label="Decrease quantity"><span class="material-symbols" aria-hidden="true">remove</span></button>
-          <button type="button" data-adjust="plus" aria-label="Increase quantity"><span class="material-symbols" aria-hidden="true">add</span></button>
+        <div class="stepper" aria-label="调整数量">
+          <button type="button" data-adjust="minus" aria-label="减少数量"><span class="material-symbols" aria-hidden="true">remove</span></button>
+          <button type="button" data-adjust="plus" aria-label="增加数量"><span class="material-symbols" aria-hidden="true">add</span></button>
         </div>
       </div>
     </article>

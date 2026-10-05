@@ -1,27 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="Review and safely apply Stockroom AI captures.">
-  <title>物簿 · 原库存 Intake</title>
+  <meta name="description" content="审核 AI 录入内容，确认后应用库存变更。">
+  <title>物簿 · 库存收件箱</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/app.css?v=2">
-  <link rel="stylesheet" href="/assets/inbox.css?v=1">
-  <script src="/assets/inbox.js?v=1" defer></script>
+  <link rel="stylesheet" href="/assets/app.css?v=zh-1">
+  <link rel="stylesheet" href="/assets/inbox.css?v=zh-1">
+  <script src="/assets/zh.js?v=zh-1" defer></script><script src="/assets/inbox.js?v=zh-1" defer></script>
 </head>
 <body>
-  <a class="skip-link" href="#inbox-work">Skip to inbox</a>
+  <a class="skip-link" href="#inbox-work">跳到收件箱</a>
 
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Stockroom home">
+    <a class="brand" href="/" aria-label="物簿首页">
       <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
-      <span><strong>物簿</strong><small>原库存 Intake · 仅库存，不记费用</small></span>
+      <span><strong>物簿</strong><small>库存收件箱 · 仅库存，不记费用</small></span>
     </a>
     <div class="topbar-actions">
       <a class="button button-secondary" href="/">
-        Inventory
+        账簿首页
       </a>
     </div>
   </header>
@@ -29,21 +29,21 @@
   <main class="inbox-shell" id="inbox-work">
     <section class="inbox-hero" aria-labelledby="inbox-title">
       <div>
-        <p class="eyebrow">AI inbox</p>
-        <h1 id="inbox-title">Review only what needs you.</h1>
-        <p>New captures are analyzed here. Ready changes stay staged until you explicitly apply them.</p>
+        <p class="eyebrow">AI 收件箱</p>
+        <h1 id="inbox-title">让 AI 整理，由你确认。</h1>
+        <p>新录入的内容在这里分析；准备好的库存变更会暂存，等你确认后应用。</p>
         <p class="inbox-focus" id="inbox-focus" hidden></p>
       </div>
       <aside class="inbox-settings" aria-labelledby="inbox-settings-title">
         <span class="material-symbols" aria-hidden="true">inventory_2</span>
         <div>
-          <strong id="inbox-settings-title">Inbox settings</strong>
+          <strong id="inbox-settings-title">收件箱设置</strong>
           <label class="inbox-toggle">
             <input id="auto-analyze" type="checkbox">
             <span class="inbox-toggle-control" aria-hidden="true"></span>
-            <span>Analyze new batches automatically</span>
+            <span>自动分析新批次</span>
           </label>
-          <small id="auto-analyze-note">Applies only to new uploads.</small>
+          <small id="auto-analyze-note">仅对新上传的内容生效。</small>
         </div>
       </aside>
     </section>
@@ -51,23 +51,23 @@
     <section class="inbox-capture" aria-labelledby="inbox-capture-title">
       <div class="inbox-capture-copy">
         <span class="material-symbols" aria-hidden="true">photo_camera</span>
-        <div><h2 id="inbox-capture-title">Add to AI inbox</h2><p>Use text, voice, or up to 10 files with one shared context.</p></div>
+        <div><h2 id="inbox-capture-title">添加到 AI 收件箱</h2><p>输入文字或上传语音、图片等文件；每批最多 10 个文件，共用一份说明。</p></div>
       </div>
       <form id="inbox-capture-form" novalidate>
         <input class="sr-only" id="inbox-files" type="file" accept="image/*,audio/*,video/*,application/pdf" multiple>
         <label class="inbox-upload-zone" id="inbox-upload-zone" for="inbox-files">
           <span class="inbox-upload-symbol" aria-hidden="true">+</span>
-          <span><strong>Drop files or choose files</strong><small>Images, PDFs, audio, or video · 10 files / 250 MB</small></span>
+          <span><strong>拖入或选择文件</strong><small>图片、PDF、音频或视频 · 最多 10 个文件 / 共 250 MB</small></span>
         </label>
         <label class="inbox-context">
-          <span>Shared context <small>optional</small></span>
-          <textarea id="inbox-text" maxlength="100000" rows="3" placeholder="Weekly shop, pack sizes, date, or anything useful for this batch"></textarea>
+          <span>共同说明 <small>选填</small></span>
+          <textarea id="inbox-text" maxlength="100000" rows="3" placeholder="本周采购、包装规格、日期或本批次的其他说明"></textarea>
         </label>
         <div class="inbox-capture-files" id="inbox-capture-files" aria-live="polite"></div>
         <div class="inbox-capture-footer">
-          <p id="inbox-capture-status" role="status">Original files stay local and are deleted after apply or discard.</p>
+          <p id="inbox-capture-status" role="status">原文件保存在本地，应用或丢弃后删除。</p>
           <button class="button button-primary" id="inbox-capture-submit" type="submit">
-            Add and analyze
+            添加并分析
           </button>
         </div>
       </form>
@@ -77,36 +77,36 @@
 
     <section class="inbox-section inbox-section-processing" aria-labelledby="processing-title">
       <div class="inbox-section-heading">
-        <div><p class="eyebrow">In progress</p><h2 id="processing-title">Processing <span id="processing-count">0</span></h2></div>
-        <button class="button button-secondary" id="analyze-selected" type="button" hidden>Analyze this batch</button>
+        <div><p class="eyebrow">处理中</p><h2 id="processing-title">正在处理 <span id="processing-count">0</span></h2></div>
+        <button class="button button-secondary" id="analyze-selected" type="button" hidden>分析本批次</button>
       </div>
       <div class="inbox-card-list" id="processing-list"></div>
-      <p class="inbox-empty" id="processing-empty">Nothing is processing right now.</p>
+      <p class="inbox-empty" id="processing-empty">当前没有正在处理的内容。</p>
     </section>
 
     <section class="inbox-section inbox-section-ready" aria-labelledby="ready-title">
       <div class="inbox-section-heading">
-        <div><p class="eyebrow">Safe staged changes</p><h2 id="ready-title">Ready to apply <span id="ready-count">0</span></h2></div>
-        <button class="button button-primary" id="apply-ready" type="button" hidden>Apply 0 ready changes</button>
+        <div><p class="eyebrow">待确认的库存变更</p><h2 id="ready-title">可以应用 <span id="ready-count">0</span></h2></div>
+        <button class="button button-primary" id="apply-ready" type="button" hidden>应用 0 条变更</button>
       </div>
-      <p class="inbox-section-note">One confirmation applies every ready change shown here. Nothing is applied automatically.</p>
+      <p class="inbox-section-note">确认后应用这里展示的全部就绪变更；库存不会自动修改。</p>
       <div class="inbox-card-list" id="ready-list"></div>
-      <p class="inbox-empty" id="ready-empty">No safe changes are waiting.</p>
+      <p class="inbox-empty" id="ready-empty">暂无可以应用的变更。</p>
     </section>
 
     <section class="inbox-section inbox-section-review" aria-labelledby="review-title">
       <div class="inbox-section-heading">
-        <div><p class="eyebrow">Needs your decision</p><h2 id="review-title">Needs review <span id="review-count">0</span></h2></div>
+        <div><p class="eyebrow">等待你确认</p><h2 id="review-title">需要审核 <span id="review-count">0</span></h2></div>
       </div>
-      <p class="inbox-section-note">Correct a suggestion before applying it, or discard the source. Files are deleted in either case.</p>
+      <p class="inbox-section-note">修正建议后应用，或丢弃此条内容；两种操作都会删除原文件。</p>
       <div class="inbox-card-list" id="review-list"></div>
-      <p class="inbox-empty" id="review-empty">No exceptions need review.</p>
+      <p class="inbox-empty" id="review-empty">暂无需要审核的内容。</p>
     </section>
   </main>
 
   <footer class="footer">
-    <span>Sources remain in local temporary storage until they are applied or discarded.</span>
-    <span class="footer-links"><a href="/api/v1" target="_blank" rel="noreferrer">API</a><a href="/healthz" target="_blank" rel="noreferrer">Health</a></span>
+    <span>原文件暂存在本地，应用或丢弃后删除。</span>
+    <span class="footer-links"><a href="/api/v1" target="_blank" rel="noreferrer">接口说明</a><a href="/healthz" target="_blank" rel="noreferrer">健康检查</a></span>
   </footer>
 
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>

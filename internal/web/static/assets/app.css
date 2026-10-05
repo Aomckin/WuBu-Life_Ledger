@@ -695,7 +695,7 @@ input::placeholder, textarea::placeholder { color: #9ba39d; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.item-notes:empty::after { content: "No notes"; color: #a1a9a3; }
+.item-notes:empty::after { content: "暂无备注"; color: #a1a9a3; }
 
 .item-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: auto; }
 .stock-amount { min-width: 0; }

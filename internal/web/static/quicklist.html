@@ -1,87 +1,87 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
   <meta name="robots" content="noindex,nofollow">
-  <title>AI Quicklist — Stockroom</title>
+  <title>物簿 · 快速盘点</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/quicklist.css?v=1">
-  <script src="/assets/quicklist.js?v=1" defer></script>
+  <link rel="stylesheet" href="/assets/quicklist.css?v=zh-1">
+  <script src="/assets/zh.js?v=zh-1" defer></script><script src="/assets/quicklist.js?v=zh-1" defer></script>
 </head>
 <body>
   <header class="quick-header">
-    <a class="back-link" href="/" aria-label="Back to inventory">←</a>
+    <a class="back-link" href="/" aria-label="返回账簿首页">←</a>
     <div class="brand">
       <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
-      <span><strong>AI Quicklist</strong><small>Internal capture tool</small></span>
+      <span><strong>快速盘点</strong><small>内部盘点工具</small></span>
     </div>
-    <span class="internal-badge">INTERNAL</span>
+    <span class="internal-badge">内部工具</span>
   </header>
 
   <main>
     <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">Quick capture</p>
-      <h1 id="page-title">Run through your stock.</h1>
-      <p>Move a slider or enter the exact amount. Only changed rows are included in the JSON and imported.</p>
+      <p class="eyebrow">快速记录</p>
+      <h1 id="page-title">快速清点家中库存。</h1>
+      <p>拖动滑块或输入准确数量，只有修改过的物品会列入导入数据。</p>
     </section>
 
-    <section class="controls" aria-label="Filter list">
+    <section class="controls" aria-label="筛选物品列表">
       <label class="search-field">
         <span class="material-symbols" aria-hidden="true">search</span>
-        <span class="sr-only">Search items</span>
-        <input id="search" type="search" placeholder="Search items…" autocomplete="off">
+        <span class="sr-only">搜索物品</span>
+        <input id="search" type="search" placeholder="搜索物品…" autocomplete="off">
       </label>
       <label class="select-field">
-        <span class="sr-only">Category</span>
+        <span class="sr-only">分类</span>
         <select id="category-filter">
-          <option value="">All categories</option>
-          <option value="pantry">Pantry &amp; food</option>
-          <option value="drinks">Drinks</option>
-          <option value="cleaning">Cleaning</option>
-          <option value="laundry">Laundry</option>
-          <option value="bathroom">Bathroom &amp; care</option>
-          <option value="health">Health</option>
-          <option value="household">Household</option>
+          <option value="">全部分类</option>
+          <option value="pantry">食品与食材</option>
+          <option value="drinks">饮品</option>
+          <option value="cleaning">清洁用品</option>
+          <option value="laundry">洗衣用品</option>
+          <option value="bathroom">洗浴与护理</option>
+          <option value="health">健康用品</option>
+          <option value="household">家居用品</option>
         </select>
         <span class="material-symbols" aria-hidden="true">keyboard_arrow_down</span>
       </label>
       <label class="changed-toggle">
         <input id="changed-only" type="checkbox">
-        Changed only
+        只看已修改
       </label>
     </section>
 
     <div class="list-heading">
-      <div><strong id="visible-count">208 items</strong><span id="load-status">Loading current inventory…</span></div>
+      <div><strong id="visible-count">208 件物品</strong><span id="load-status">正在加载当前库存…</span></div>
       <button class="quiet-button" id="reset-changes" type="button" disabled>
         <span class="material-symbols" aria-hidden="true">refresh</span>
-        Reset changes
+        撤销本次修改
       </button>
     </div>
 
-    <section class="quick-list" id="quick-list" aria-label="Consumable household items"></section>
+    <section class="quick-list" id="quick-list" aria-label="家庭消耗品"></section>
 
     <div class="empty-state" id="empty-state" hidden>
       <span class="material-symbols" aria-hidden="true">search</span>
-      <strong>No matches</strong>
-      <span>Change your search or filter.</span>
+      <strong>没有匹配的物品</strong>
+      <span>请调整搜索内容或筛选条件。</span>
     </div>
   </main>
 
   <div class="action-bar">
-    <div><strong id="changed-count">0 changed</strong><span id="quantity-total">No changes yet</span></div>
+    <div><strong id="changed-count">已修改 0 件</strong><span id="quantity-total">尚未修改</span></div>
     <button class="primary-button" id="preview-button" type="button" disabled>
-      Review JSON
+      预览导入数据
       <span class="material-symbols" aria-hidden="true">check</span>
     </button>
   </div>
 
   <dialog id="preview-dialog" aria-labelledby="preview-title">
     <div class="dialog-header">
-      <div><p class="eyebrow">Before import</p><h2 id="preview-title">JSON preview</h2></div>
-      <button class="icon-button" id="close-preview" type="button" aria-label="Close"><span class="material-symbols" aria-hidden="true">close</span></button>
+      <div><p class="eyebrow">导入前确认</p><h2 id="preview-title">导入数据预览</h2></div>
+      <button class="icon-button" id="close-preview" type="button" aria-label="关闭"><span class="material-symbols" aria-hidden="true">close</span></button>
     </div>
     <div class="dialog-body">
       <div class="import-summary" id="import-summary"></div>
@@ -89,8 +89,8 @@
       <div class="result-message" id="result-message" role="status" hidden></div>
     </div>
     <div class="dialog-actions">
-      <button class="secondary-button" id="cancel-preview" type="button">Back</button>
-      <button class="primary-button" id="import-button" type="button">Import into Stockroom</button>
+      <button class="secondary-button" id="cancel-preview" type="button">返回</button>
+      <button class="primary-button" id="import-button" type="button">导入物簿</button>
     </div>
   </dialog>
 
@@ -103,7 +103,7 @@
         <input class="range-input" type="range" min="0" max="20" step="1">
         <div class="range-labels"><span>0</span><span>10</span><span>20+</span></div>
       </div>
-      <label class="number-wrap"><span class="sr-only">Quantity</span><input class="number-input" type="number" min="0" max="1000000000" step="1"><small></small></label>
+      <label class="number-wrap"><span class="sr-only">数量</span><input class="number-input" type="number" min="0" max="1000000000" step="1"><small></small></label>
     </article>
   </template>
 

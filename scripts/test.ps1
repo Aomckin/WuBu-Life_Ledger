@@ -21,6 +21,10 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -ne 0) { throw 'Tool package tests failed' }
 }
 if (Get-Command node -ErrorAction SilentlyContinue) {
-    node --check internal\web\static\assets\ledger.js
-    if ($LASTEXITCODE -ne 0) { throw 'JavaScript syntax check failed' }
+    Get-ChildItem -LiteralPath internal\web\static\assets -Filter '*.js' | ForEach-Object {
+        node --check $_.FullName
+        if ($LASTEXITCODE -ne 0) { throw 'JavaScript syntax check failed' }
+    }
+    node scripts\test-frontend.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Frontend checks failed' }
 }

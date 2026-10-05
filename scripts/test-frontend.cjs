@@ -1,0 +1,46 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const root = path.join(__dirname, '../internal/web/static');
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const context = vm.createContext({ window: {}, document: { querySelector: () => ({}), addEventListener() {} }, URLSearchParams });
+vm.runInContext(read('assets/zh.js'), context);
+const zh = context.window.WubuZh;
+assert.equal(zh.category('health'), '健康用品');
+assert.equal(zh.unit('kg'), '千克');
+assert.equal(zh.location('用户自定义位置'), '用户自定义位置');
+const input = { dataset: {} };
+zh.setEditable(input, 'pcs', 'unit');
+assert.equal(input.value, '个');
+assert.equal(zh.originalValue(input), 'pcs');
+input.value = '盒';
+assert.equal(zh.originalValue(input), '盒');
+zh.setEditable(input, 'Freezer', 'location');
+assert.equal(input.value, '冰箱冷冻室');
+assert.equal(zh.originalValue(input), 'Freezer');
+assert.match(zh.error({code:'ai_unavailable', message:'Local AI did not respond.'}, 503), /本地 AI/);
+assert.equal(zh.error({fields:{name:'Name is required.'}}), '请填写名称。');
+assert.equal(zh.fieldMessage('notes', 'Notes must be at most 500 characters.'), '备注最多 500 个字符。');
+assert.equal(zh.error(new Error('Failed to fetch')), '操作未完成，请检查连接后重试。');
+assert.equal(zh.error(new Error('库存不足。')), '库存不足。');
+const icons = read('assets/app.js').match(/const ICON_NAMES = `([^`]+)`/)[1].trim().split(/\s+/);
+for (const icon of icons) assert.match(zh.icons[icon], /[\u3400-\u9fff]/, icon);
+context.WubuZh = zh;
+vm.runInContext(read('assets/quicklist.js').replace(/initialize\(\);\s*$/, ''), context);
+vm.runInContext(`
+  if (CATALOG.length !== 208 || CATALOG.some(item => !/[\\u3400-\\u9fff]/.test(item.name))) throw new Error('Catalog translation incomplete');
+  const oldRecord = { name: 'Reis', quantity: 4 };
+  const legacyMap = new Map([[normalize(oldRecord.name), oldRecord]]);
+  if (existingItem(legacyMap, CATALOG[0]) !== oldRecord) throw new Error('Legacy inventory matching broken');
+  const newRecord = { name: '大米', quantity: 2 };
+  legacyMap.set(normalize(newRecord.name), newRecord);
+  if (existingItem(legacyMap, CATALOG[0]) !== newRecord) throw new Error('Chinese inventory matching broken');
+`, context);
+for (const name of ['index.html', 'inbox.html', 'quicklist.html', 'ledger.html']) {
+  const html = read(name);
+  assert.match(html, /lang="zh-CN"/);
+  assert.ok(html.indexOf('/assets/zh.js') < html.indexOf(`/assets/${{ 'index.html':'app', 'inbox.html':'inbox', 'quicklist.html':'quicklist', 'ledger.html':'ledger' }[name]}.js`));
+  assert.doesNotMatch(html, /material-symbols[^>]*>[\u3400-\u9fff]/, 'Icon identifiers must stay unchanged');
+}
+console.log('Frontend localization and legacy data compatibility checks passed.');
