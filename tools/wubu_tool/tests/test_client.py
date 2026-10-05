@@ -8,9 +8,10 @@ from wubu_tool.client import WubuClient, WubuError
 class ClientTests(unittest.TestCase):
     def test_read_escapes_ids_and_query(self):
         with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"quantity":4}')) as call:
-            result = WubuClient().call("get_item", item_id="a/b", query={"name":"无糖可乐"})
+            result = WubuClient().call("get_item", item_id="a/b", query={"name":"无糖可乐", "hide_out":True})
             request = call.call_args.args[0]
             self.assertIn("/items/a%2Fb?", request.full_url)
+            self.assertIn("hide_out=true", request.full_url)
             self.assertEqual(request.method, "GET")
             self.assertEqual(result["quantity"], 4)
 

@@ -63,7 +63,7 @@ class WubuClient:
         if write and query:
             raise ValueError("write operation cannot have query")
         if query:
-            path += "?" + urlencode(query)
+            path += "?" + urlencode({k: str(v).lower() if isinstance(v, bool) else v for k, v in query.items()})
         headers = {"Accept": "application/json"}
         body = None
         if write:
