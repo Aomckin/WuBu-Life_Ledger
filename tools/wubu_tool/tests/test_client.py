@@ -6,6 +6,29 @@ from urllib.error import HTTPError, URLError
 from wubu_tool.client import WubuClient, WubuError
 
 class ClientTests(unittest.TestCase):
+    def test_validation_posts_without_write_key_and_preserves_candidates(self):
+        with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"warnings":[]}')) as call:
+            WubuClient().call("validate_purchase",payload={"items":[]})
+            request=call.call_args.args[0]
+            self.assertEqual(request.method,"POST")
+            self.assertIsNone(request.get_header("Idempotency-key"))
+        detail={"code":"ITEM_AMBIGUOUS","message":"select","retryable":False,"suggested_action":"ask_user_to_select_candidate","candidates":[{"id":"one"}]}
+        error=HTTPError("http://127.0.0.1",409,"conflict",{},io.BytesIO(json.dumps({"error":detail}).encode()))
+        with patch("wubu_tool.client.urlopen",side_effect=error):
+            with self.assertRaises(WubuError) as caught:
+                WubuClient().call("consume_by_name",payload={"name":"cola","quantity":1},idempotency_key="same")
+            self.assertEqual(caught.exception.detail,detail)
+    def test_amend_and_delete_keep_version_and_stable_key(self):
+        for operation, method in [("amend_purchase_event", "PUT"), ("delete_purchase_event", "DELETE")]:
+            with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"id":"purchase"}')) as call:
+                payload = {"expected_updated_at":"2026-10-06T02:00:00Z"}
+                WubuClient().call(operation, purchase_id="purchase/1", payload=payload, idempotency_key="correction-1")
+                request = call.call_args.args[0]
+                self.assertEqual(request.method, method)
+                self.assertTrue(request.full_url.endswith("/purchases/purchase%2F1"))
+                self.assertEqual(json.loads(request.data), payload)
+                self.assertEqual(request.get_header("Idempotency-key"), "correction-1")
+
     def test_read_escapes_ids_and_query(self):
         with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"quantity":4}')) as call:
             result = WubuClient().call("get_item", item_id="a/b", query={"name":"无糖可乐", "hide_out":True})

@@ -25,7 +25,7 @@ var ErrIntakeWorkflowConflict = errors.New("intake workflow state changed")
 
 const itemColumns = `id, name, category, icon, quantity, unit, location,
 	low_stock_threshold, expiry_date, unit_price_cents, short_lived, auto_consume_at,
-	notes, created_at, updated_at, version, item_type, opened_at`
+	notes, created_at, updated_at, version, item_type, opened_at, spec, package_size, package_unit`
 
 type Store struct {
 	db        *sql.DB
@@ -237,13 +237,18 @@ func (s *Store) ensureColumn(ctx context.Context, table, column, statement strin
 }
 
 func (s *Store) Create(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
+	var err error
+	input.Name, input.ProductSpec, err = inventory.NormalizeProduct(input.Name, input.ProductSpec)
+	if err != nil {
+		return inventory.Item{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO items (
+	_, err = s.db.ExecContext(ctx, `INSERT INTO items (
 id, name, category, icon, quantity, unit, location, low_stock_threshold, expiry_date, unit_price_cents,
-short_lived, auto_consume_at, notes, created_at, updated_at, version
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+short_lived, auto_consume_at, notes, created_at, updated_at, version,spec,package_size,package_unit
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1,?,?,?)`,
 		id, input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
-		input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, now)
+		input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, now, input.Spec, input.PackageSize, input.PackageUnit)
 	if err != nil {
 		return inventory.Item{}, fmt.Errorf("create item: %w", err)
 	}
@@ -270,9 +275,9 @@ func (s *Store) Update(ctx context.Context, id string, input inventory.ItemInput
 	result, err := s.db.ExecContext(ctx, `UPDATE items SET
 name = ?, category = ?, icon = ?, quantity = ?, unit = ?, location = ?,
 low_stock_threshold = ?, expiry_date = ?, unit_price_cents = ?,
-short_lived = ?, auto_consume_at = ?, notes = ?, updated_at = ?, version = version + 1
+short_lived = ?, auto_consume_at = ?, notes = ?, updated_at = ?, version = version + 1,spec=?,package_size=?,package_unit=?
 WHERE id = ?`, input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
-		input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, id)
+		input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, input.Spec, input.PackageSize, input.PackageUnit, id)
 	if err != nil {
 		return inventory.Item{}, fmt.Errorf("update item: %w", err)
 	}
@@ -319,6 +324,29 @@ func (s *Store) List(ctx context.Context, filter inventory.ListFilter) (inventor
 		where = append(where, `(name LIKE ? ESCAPE '\' OR notes LIKE ? ESCAPE '\' OR EXISTS (SELECT 1 FROM product_aliases a WHERE a.item_id=items.id AND (a.alias LIKE ? ESCAPE '\' OR a.normalized_alias LIKE ? ESCAPE '\')))`)
 		search := "%" + escapeLike(filter.Search) + "%"
 		args = append(args, search, search, search, "%"+escapeLike(ledger.NormalizeName(filter.Search))+"%")
+		// Listing can show every ambiguous candidate instead of choosing one.
+		matched, resolveErr := resolveTarget(ctx, s.db, itemTarget{Name: filter.Search})
+		ids := []string{}
+		if resolveErr == nil {
+			ids = append(ids, matched.ID)
+		} else {
+			var resolution *ResolutionError
+			if errors.As(resolveErr, &resolution) {
+				for _, c := range resolution.Candidates {
+					ids = append(ids, c.ID)
+				}
+			} else if !errors.Is(resolveErr, ledger.ErrInvalid) {
+				return inventory.ListResult{}, resolveErr
+			}
+		}
+		if len(ids) > 0 {
+			marks := make([]string, len(ids))
+			for i, id := range ids {
+				marks[i] = "?"
+				args = append(args, id)
+			}
+			where[len(where)-1] = "(" + where[len(where)-1] + " OR id IN (" + strings.Join(marks, ",") + "))"
+		}
 	}
 	if filter.Category != "" {
 		where = append(where, "category = ?")
@@ -411,7 +439,7 @@ func scanItem(row scanner) (inventory.Item, error) {
 	var opened sql.NullString
 	err := row.Scan(&item.ID, &item.Name, &item.Category, &item.Icon, &item.Quantity, &item.Unit,
 		&item.Location, &threshold, &expiry, &unitPrice, &shortLived, &autoConsume,
-		&item.Notes, &item.CreatedAt, &item.UpdatedAt, &item.Version, &item.ItemType, &opened)
+		&item.Notes, &item.CreatedAt, &item.UpdatedAt, &item.Version, &item.ItemType, &opened, &item.Spec, &item.PackageSize, &item.PackageUnit)
 	if err != nil {
 		return inventory.Item{}, err
 	}
@@ -424,6 +452,7 @@ func scanItem(row scanner) (inventory.Item, error) {
 	if unitPrice.Valid {
 		item.UnitPriceCents = &unitPrice.Int64
 	}
+	item.InventoryUnit = item.Unit
 	item.ShortLived = shortLived == 1
 	if opened.Valid {
 		item.OpenedAt = &opened.String

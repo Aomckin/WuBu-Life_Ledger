@@ -9,11 +9,17 @@ func (s *Store) migrateLedger(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "items", "opened_at", `ALTER TABLE items ADD COLUMN opened_at TEXT`); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, ledgerSchema)
-	return err
+	if _, err := s.db.ExecContext(ctx, ledgerSchema); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "purchase_events", "deleted_at", `ALTER TABLE purchase_events ADD COLUMN deleted_at TEXT`); err != nil {
+		return err
+	}
+	return s.migrateProducts(ctx)
 }
 
 const ledgerSchema = `
+CREATE TABLE IF NOT EXISTS ledger_migrations (name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS ledger_lock (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
 INSERT OR IGNORE INTO ledger_lock VALUES(1,0);
 CREATE TABLE IF NOT EXISTS purchase_events (
@@ -65,10 +71,15 @@ CREATE TABLE IF NOT EXISTS product_aliases (
 CREATE TABLE IF NOT EXISTS idempotency_keys (
  key TEXT PRIMARY KEY, operation TEXT NOT NULL, request_hash TEXT NOT NULL, response_json TEXT NOT NULL, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS purchase_revisions (
+ id TEXT PRIMARY KEY, purchase_event_id TEXT NOT NULL REFERENCES purchase_events(id),
+ action TEXT NOT NULL CHECK(action IN ('EDIT','DELETE')), before_json TEXT NOT NULL,
+ after_json TEXT NOT NULL, occurred_at TEXT NOT NULL
+);
 -- Baseline is inserted only for pre-existing rows with no history (safe across restarts).
 INSERT INTO inventory_events
 SELECT lower(hex(randomblob(16))),i.id,'ADJUST',i.quantity,0,i.quantity,NULL,i.created_at,'import','Stockroom migration baseline'
-FROM items i WHERE i.item_type='CONSUMABLE' AND i.quantity>0 AND NOT EXISTS(SELECT 1 FROM inventory_events e WHERE e.item_id=i.id);
+FROM items i WHERE i.quantity>0 AND NOT EXISTS(SELECT 1 FROM inventory_events e WHERE e.item_id=i.id);
 CREATE TRIGGER IF NOT EXISTS wubu_item_create AFTER INSERT ON items WHEN NEW.item_type='CONSUMABLE' AND NEW.quantity>0 BEGIN
  INSERT INTO inventory_events VALUES(lower(hex(randomblob(16))),NEW.id,'ADJUST',NEW.quantity,0,NEW.quantity,NULL,NEW.updated_at,'manual','Initial inventory');
 END;
@@ -81,5 +92,5 @@ END;
 CREATE TRIGGER IF NOT EXISTS wubu_item_delete BEFORE DELETE ON items WHEN OLD.quantity>0 BEGIN
  INSERT INTO inventory_events VALUES(lower(hex(randomblob(16))),OLD.id,'DISCARD',-OLD.quantity,OLD.quantity,0,NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'manual','Deleted legacy inventory item');
 END;
-PRAGMA user_version = 7;
+PRAGMA user_version = 9;
 `

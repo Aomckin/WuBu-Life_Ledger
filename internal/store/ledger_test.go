@@ -53,7 +53,7 @@ func TestPurchaseAcceptanceAndLifecycle(t *testing.T) {
 	countTable(t, s, "purchase_items", 3)
 	countTable(t, s, "expenses", 1)
 	countTable(t, s, "items", 3)
-	countTable(t, s, "inventory_events", 2)
+	countTable(t, s, "inventory_events", 3)
 	if p.ItemTotal != 22900 || p.Items[0].ItemID == "" {
 		t.Fatalf("purchase %+v", p)
 	}
@@ -123,7 +123,7 @@ func TestPurchaseIdempotencyConflictAndUntracked(t *testing.T) {
 		t.Fatal(p)
 	}
 	countTable(t, s, "items", 3)
-	countTable(t, s, "inventory_events", 2)
+	countTable(t, s, "inventory_events", 3)
 	countTable(t, s, "expenses", 2)
 	input.ExternalID = "bill-001"
 	mustPurchase(t, s, "ext", input)
@@ -359,7 +359,7 @@ func TestIdempotencyPersistsAcrossRestart(t *testing.T) {
 		t.Fatal(second, replay, err)
 	}
 	countTable(t, s, "purchase_events", 1)
-	countTable(t, s, "inventory_events", 2)
+	countTable(t, s, "inventory_events", 3)
 }
 
 func TestMaintenanceRollbackAndDurableRestore(t *testing.T) {

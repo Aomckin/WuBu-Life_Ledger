@@ -9,6 +9,10 @@ vm.runInContext(read('assets/zh.js'), context);
 const zh = context.window.WubuZh;
 assert.equal(zh.category('health'), '健康用品');
 assert.equal(zh.unit('kg'), '千克');
+assert.equal(zh.unit('L'), '升');
+assert.equal(zh.product({name:'无糖可乐',spec:'2L'}), '无糖可乐 2L');
+assert.equal(zh.product({name:'纸巾',spec:''}), '纸巾');
+assert.ok(['瓶', '罐', '升', '个'].every(unit => zh.commonUnits.includes(unit)));
 assert.equal(zh.location('用户自定义位置'), '用户自定义位置');
 const input = { dataset: {} };
 zh.setEditable(input, 'pcs', 'unit');
@@ -24,6 +28,7 @@ assert.equal(zh.error({fields:{name:'Name is required.'}}), '请填写名称。'
 assert.equal(zh.fieldMessage('notes', 'Notes must be at most 500 characters.'), '备注最多 500 个字符。');
 assert.equal(zh.error(new Error('Failed to fetch')), '操作未完成，请检查连接后重试。');
 assert.equal(zh.error(new Error('库存不足。')), '库存不足。');
+assert.equal(zh.error(new Error('ledger conflict: 这笔购买已被修改。')), '这笔购买已被修改。');
 const icons = read('assets/app.js').match(/const ICON_NAMES = `([^`]+)`/)[1].trim().split(/\s+/);
 for (const icon of icons) assert.match(zh.icons[icon], /[\u3400-\u9fff]/, icon);
 context.WubuZh = zh;

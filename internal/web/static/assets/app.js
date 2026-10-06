@@ -886,7 +886,7 @@ function populateMetadata() {
     elements.categoryFilter.append(new Option(WubuZh.category(category.value), category.value));
     elements.category.append(new Option(WubuZh.category(category.value), category.value));
   }
-  for (const unit of state.meta.suggested_units) elements.unitSuggestions.append(new Option(WubuZh.unit(unit)));
+  for (const unit of new Set([...WubuZh.commonUnits, ...state.meta.suggested_units.map(WubuZh.unit)])) elements.unitSuggestions.append(new Option(unit));
   for (const location of state.meta.suggested_locations) elements.locationSuggestions.append(new Option(WubuZh.location(location)));
   rebuildLocationFilter(state.meta.suggested_locations);
 }
@@ -974,12 +974,12 @@ function buildItemCard(item) {
   const card = elements.cardTemplate.content.firstElementChild.cloneNode(true);
   card.dataset.id = item.id;
   card.querySelector(".item-icon").textContent = item.icon;
-  card.querySelector(".item-name").textContent = item.name;
-  card.querySelector(".item-edit").setAttribute("aria-label", `编辑 ${item.name}`);
+  card.querySelector(".item-name").textContent = WubuZh.product(item);
+  card.querySelector(".item-edit").setAttribute("aria-label", `编辑 ${WubuZh.product(item)}`);
   const shortLivedToggle = card.querySelector(".short-lived-toggle");
   shortLivedToggle.classList.toggle("is-active", item.short_lived);
   shortLivedToggle.setAttribute("aria-pressed", String(item.short_lived));
-  shortLivedToggle.setAttribute("aria-label", item.short_lived ? `取消 ${item.name} 的尽快使用计时` : `将 ${item.name} 标记为尽快使用`);
+  shortLivedToggle.setAttribute("aria-label", item.short_lived ? `取消 ${WubuZh.product(item)} 的尽快使用计时` : `将 ${WubuZh.product(item)} 标记为尽快使用`);
   shortLivedToggle.title = item.short_lived ? "取消 7 天计时" : "7 天内使用";
 
   const category = WubuZh.category(item.category);
@@ -1052,7 +1052,7 @@ async function handleCardAction(event) {
     return;
   }
   if (event.target.closest('[data-action="consume"]')) {
-    await updateItemLifecycle(item, { quantity: 0, clear_auto_consume_at: true }, `已将 ${item.name} 标记为用完。`, card);
+    await updateItemLifecycle(item, { quantity: 0, clear_auto_consume_at: true }, `已将 ${WubuZh.product(item)} 标记为用完。`, card);
     return;
   }
   if (event.target.closest('[data-action="edit"]')) {
@@ -1112,7 +1112,7 @@ function openEditor(item = null) {
   elements.dialogTitle.textContent = item ? "编辑物品" : "添加物品";
   elements.dialogEyebrow.textContent = item ? "更新库存" : "新增库存物品";
   elements.deleteItem.hidden = !item;
-  elements.name.value = item?.name || "";
+  elements.name.value = WubuZh.product(item) || "";
   elements.category.value = item?.category || "pantry";
   elements.quantity.value = item?.quantity ?? 1;
   WubuZh.setEditable(elements.unit, item?.unit || "个", "unit");
@@ -1168,7 +1168,7 @@ async function saveEditor(event) {
       body: JSON.stringify(payload),
     });
     elements.dialog.close();
-    showToast(state.editingId ? `已更新 ${item.name}。` : `已添加 ${item.name}。`);
+    showToast(state.editingId ? `已更新 ${WubuZh.product(item)}。` : `已添加 ${WubuZh.product(item)}。`);
     await refreshAll();
   } catch (error) {
     if (error.detail?.fields) showFieldErrors(error.detail.fields);
@@ -1182,7 +1182,7 @@ async function saveEditor(event) {
 function openDeleteConfirmation() {
   const item = state.items.find((entry) => entry.id === state.editingId);
   if (!item) return;
-  elements.confirmName.textContent = item.name;
+  elements.confirmName.textContent = WubuZh.product(item);
   elements.confirmDialog.showModal();
 }
 
@@ -1194,7 +1194,7 @@ async function deleteCurrentItem() {
     await request(`/api/v1/items/${encodeURIComponent(item.id)}`, { method: "DELETE" });
     elements.confirmDialog.close();
     elements.dialog.close();
-    showToast(`已删除 ${item.name}。`);
+    showToast(`已删除 ${WubuZh.product(item)}。`);
     await refreshAll();
   } catch (error) {
     showToast(WubuZh.error(error), true);

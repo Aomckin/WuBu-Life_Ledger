@@ -19,6 +19,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     # -B prevents any bytecode writes to read-only Zhaoxi sources.
     python -B -m unittest discover -s tools\wubu_tool\tests -p $pattern -v
     if ($LASTEXITCODE -ne 0) { throw 'Tool package tests failed' }
+    if ($ZhaoxiSource) { & (Join-Path $PSScriptRoot 'test-sdk-integration.ps1') -ZhaoxiSource $ZhaoxiSource -GoCommand $goCommand }
 }
 if (Get-Command node -ErrorAction SilentlyContinue) {
     Get-ChildItem -LiteralPath internal\web\static\assets -Filter '*.js' | ForEach-Object {

@@ -42,7 +42,7 @@ JSON 示例（传给 wubu）：
     "source": "agent",
     "currency": "CNY",
     "items": [
-      {"name":"无糖可乐 2L","quantity":4,"unit":"瓶","unit_price":5.5,"subtotal":22,"item_type":"CONSUMABLE"},
+      {"name":"无糖可乐","spec":"2L","quantity":4,"unit":"瓶","unit_price":5.5,"subtotal":22,"item_type":"CONSUMABLE"},
       {"name":"泡面","quantity":2,"unit":"包","unit_price":4,"subtotal":8,"item_type":"CONSUMABLE"},
       {"name":"耳机","quantity":1,"unit":"个","unit_price":199,"subtotal":199,"item_type":"DURABLE"}
     ]
@@ -50,30 +50,38 @@ JSON 示例（传给 wubu）：
 }
 ```
 
-读取名称后消耗：
+v0.1.1 常用购买优先使用独立 `record_purchase`，无需先查询或创建：
 
 ```json
-{"operation":"resolve_item","query":{"name":"零度可乐大瓶"}}
+{"items":[{"name":"无糖可乐","spec":"2L","quantity":1,"unit":"瓶","price":5.5}],"idempotency_key":"purchase-20261006-001"}
 ```
 
+单商品仅有实际总价时可以省略 price 并填 total；总价省略时按明细合计。`validate_purchase` 参数相同但不需要幂等键，仅读取与验证，不写入。
+
+按别名消耗优先使用独立 `wubu_inventory_event`，同一事务内解析名称并扣库存：
+
 ```json
-{"operation":"consume_item","item_id":"查询返回的 id","idempotency_key":"consume-20261005-001","payload":{"quantity":1,"source":"agent"}}
+{"action":"consume","name":"零度可乐大瓶","quantity":1,"idempotency_key":"consume-20261006-001"}
 ```
+
+`adjust` 的 quantity 是实际剩余；`open` / `finish` / `discard` 不填数量。不存在时不创建，多候选返回 `ITEM_AMBIGUOUS` 和 id / name / spec / unit / current_quantity；需指定规格或选择 ID。工具保留完整错误及 suggested_action，不将歧义伪装成成功。
+
+REST 对应 `/api/v1/purchases/record`、`/purchases/validate`、`/items/consume` 等；完整购买 DTO 和现有 ID 路由继续支持耐用品及改单。规格单独填 spec 或 package_size / package_unit，库存 unit（响应同时提供 inventory_unit）仍为计数单位。
 
 ## 未来解除只读限制后的接入步骤（本次未执行）
 
 1. 启动物簿服务；健康检查 `http://127.0.0.1:8026/healthz`。
 2. 使用朝汐自己的 Python 环境安装物簿侧包（此步骤会改朝汐环境，因此本次禁止执行）：`python -m pip install -e "E:\桌面\改变世界的魔法\物簿\tools\wubu_tool" --no-deps`。
 3. 在朝汐工具配置加入 `ZHAOXI_TOOL_WUBU_ENABLED=true`、`ZHAOXI_TOOL_WUBU_BASE_URL=http://127.0.0.1:8026`、可选 `ZHAOXI_TOOL_WUBU_TIMEOUT_SECONDS=15`。协议默认发现但不启用，需要显式启用。
-4. 重启朝汐，检查工具列表出现 wubu，再使用任务书 A–E 场景做自然语言验收。
+4. 重启朝汐，检查工具列表出现 record_purchase、validate_purchase、wubu_inventory_event 和 wubu，再使用任务书场景做自然语言验收。
 
 重试规则：同一真实事件复用同一键和同一 DTO；409 幂等冲突意味着参数变更，不应自动换键重发原事件。source + external_id 还可避免同一外部订单换键重复入账。没有外部订单号时，键必须由调用方稳定保存。
 
 ## 金额、时间与生命周期约定
 
 - Purchase / Expense / Maintenance 的金额字段为 **CNY 元**，两位小数；SQLite 存整数分。母体 Item 的 `unit_price_cents` 继续表示分。
-- 当前仅支持 CNY，不进行汇率转换；实际付款允许与商品合计不同。单价不含强制分摊优惠。
+- 当前仅支持 CNY，不进行汇率转换；实际付款允许与商品合计不同，差异超过一分钱返回 Warning；非法数值是 Error。单价不强制分摊优惠。
 - 事件时间是 RFC3339，带时区；数据库统一 UTC。`from` 含边界、`to` 不含边界。月份汇总固定 Asia/Shanghai。
-- 同名消耗品按精确名称 → 精确别名 → 标准化精确匹配；多结果 409，需要明确 item_id；单位或物品类型冲突 409，不自动换算。
+- 统一匹配顺序：名称与规格 → 别名 → 归一化精确匹配 → 唯一高置信候选。多个合理候选返回 409；支持空白、全角、大小写及 2L ↔ 2000ml 规格等价，库存数量不跨单位换算。
 - 新耐用品每行数量必须 1，默认创建独立实例；quantity>1 请拆行。生命周期字段在 durable 接口；售出价格仅为元数据，v0.1 没有收入账本。
 - 原 Intake 只应用库存建议，不能记录完整购买费用；购买必须用 purchases。

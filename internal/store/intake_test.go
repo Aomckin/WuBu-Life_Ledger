@@ -170,8 +170,8 @@ PRAGMA user_version = 1;`); err != nil {
 		t.Fatalf("preserved item = %#v, %v", item, err)
 	}
 	var version int
-	if err := migrated.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 7 {
-		t.Fatalf("user_version = %d, %v; want 7", version, err)
+	if err := migrated.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
+		t.Fatalf("user_version = %d, %v; want 9", version, err)
 	}
 	entries, err := migrated.ListIntakes(context.Background(), intake.ListFilter{Limit: 10})
 	if err != nil || entries.Total != 0 {

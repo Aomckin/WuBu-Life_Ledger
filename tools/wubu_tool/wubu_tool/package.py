@@ -7,8 +7,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zhaoxi.sdk import CapabilityDeclaration, PermissionLevel, SideEffect, Tool, ToolResult
 from .client import ROUTES, WubuClient, WubuError
+from .event_tools import RecordPurchaseTool, ValidatePurchaseTool, InventoryEventTool
 
 Operation = Literal[
+    "amend_purchase_event", "delete_purchase_event",
     "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item",
     "add_maintenance_event", "add_product_alias", "update_durable_details", "search_items", "resolve_item",
     "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history",
@@ -56,8 +58,10 @@ class WubuTool(Tool):
     description = (
         "物簿记录钱与物：买、用、调、开、完、修、查。购买只调用一次 record_purchase_event，"
         "不要拆成库存和账目 CRUD。写入必须有稳定 idempotency_key，超时保留原键与参数重试。"
-        "先 resolve_item/search_items 获取 item_id；同名耐用品可能多件，不能猜。"
+        "常用购买优先独立 record_purchase 工具，自动匹配或创建；按名称消耗等优先 wubu_inventory_event。其他需要 ID 的操作可 resolve_item；同名耐用品不能猜。"
         "payload 金额是元（两位小数），原 Item.unit_price_cents 是分。"
+        "包装规格单独写 spec：name=无糖可乐，spec=2L，quantity=1，unit=瓶；不能把规格2L误当成数量。常用单位：瓶、罐、升、毫升、个、包、盒、袋、箱、克、千克。"
+        "改单或删除先 get_purchase_event 读取最新记录；提供 expected_updated_at 和新幂等键。改单保留来源、external_id 和原商品行 id；不再拆开改库存和费用。"
         "耐用品每件一行、quantity=1，服务用 UNTRACKED。只在用户有记录/查询意图时调用。"
         "库存纠正用 adjust_inventory payload.quantity（绝对剩余），消耗用 consume_item payload.quantity（用掉量）。"
         "写入 DTO 见 schema，复杂判断由朝汐完成。"
@@ -73,25 +77,27 @@ class WubuTool(Tool):
         return self.permission_for(arguments) == PermissionLevel.READ or bool(arguments.get("idempotency_key"))
     async def execute(self, arguments):
         values = arguments.model_dump(exclude={"operation"}, exclude_none=True)
+        if arguments.operation in {"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event"}:
+            values["payload"] = {**values.get("payload", {}), "source": "agent"}
         try:
             result = await asyncio.to_thread(self.client.call, arguments.operation, **values)
             return ToolResult(success=True, content="物簿操作完成。", data=result)
         except WubuError as exc:
-            return ToolResult(success=False, content=str(exc), error=exc.code, metadata={"unknown_outcome": exc.unknown_outcome, "idempotency_key": arguments.idempotency_key})
+            return ToolResult(success=False, content=str(exc), error=exc.code, data={"error":exc.detail}, metadata={"unknown_outcome": exc.unknown_outcome, "idempotency_key": arguments.idempotency_key})
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "0.1.0"
+    package_version = "0.1.1"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)
     def configure(self, config): self.client = WubuClient(str(config.get("base_url", "http://127.0.0.1:8026")), float(config.get("timeout_seconds", 15)))
     def create_tools(self, config):
         if self.client is None: self.configure(config)
-        return [WubuTool(self.client)]
+        return [WubuTool(self.client), RecordPurchaseTool(self.client), ValidatePurchaseTool(self.client), InventoryEventTool(self.client)]
     def workflow_paths(self): return []
     def reflection_sources(self): return []
     def routing_hints(self): return [{"markers": ["物簿", "life ledger", "还剩几", "记录购买", "上次多少钱", "记录维修"], "route": "tool"}]
-    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "wubu", "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
+    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "record_purchase", "tools": ["record_purchase", "validate_purchase", "wubu_inventory_event", "wubu"], "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
 
 def create_package(): return WubuToolPackage()

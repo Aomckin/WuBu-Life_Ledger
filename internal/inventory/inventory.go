@@ -49,6 +49,8 @@ var SuggestedLocations = []string{
 }
 
 type Item struct {
+	ProductSpec
+	InventoryUnit     string   `json:"inventory_unit"`
 	ItemType          string   `json:"item_type"`
 	OpenedAt          *string  `json:"opened_at"`
 	ID                string   `json:"id"`
@@ -70,6 +72,8 @@ type Item struct {
 }
 
 type ItemInput struct {
+	ProductSpec
+	InventoryUnit     string   `json:"inventory_unit,omitempty"`
 	Name              string   `json:"name"`
 	Category          string   `json:"category"`
 	Icon              string   `json:"icon"`
@@ -85,6 +89,7 @@ type ItemInput struct {
 }
 
 type ItemPatch struct {
+	Spec              *string  `json:"spec"`
 	Name              *string  `json:"name"`
 	Category          *string  `json:"category"`
 	Icon              *string  `json:"icon"`
@@ -137,6 +142,14 @@ func (e *ValidationError) Error() string { return "item validation failed" }
 var iconPattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
 func NormalizeAndValidate(input ItemInput) (ItemInput, error) {
+	var productErr error
+	input.Name, input.ProductSpec, productErr = NormalizeProduct(input.Name, input.ProductSpec)
+	if input.InventoryUnit != "" {
+		if input.Unit != "" && UnitKey(input.Unit) != UnitKey(input.InventoryUnit) {
+			return input, &ValidationError{Fields: map[string]string{"inventory_unit": "库存单位与 unit 不一致。"}}
+		}
+		input.Unit = input.InventoryUnit
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Category = strings.TrimSpace(strings.ToLower(input.Category))
 	input.Icon = strings.TrimSpace(input.Icon)
@@ -156,6 +169,9 @@ func NormalizeAndValidate(input ItemInput) (ItemInput, error) {
 	input.Quantity = roundQuantity(input.Quantity)
 
 	fields := map[string]string{}
+	if productErr != nil {
+		fields["spec"] = productErr.Error()
+	}
 	if input.Name == "" {
 		fields["name"] = "Name is required."
 	} else if len([]rune(input.Name)) > MaxNameLength {
@@ -222,12 +238,16 @@ func NormalizeAndValidate(input ItemInput) (ItemInput, error) {
 
 func ApplyPatch(item Item, patch ItemPatch) ItemInput {
 	input := ItemInput{
-		Name: item.Name, Category: item.Category, Icon: item.Icon, Quantity: item.Quantity,
+		ProductSpec: item.ProductSpec,
+		Name:        item.Name, Category: item.Category, Icon: item.Icon, Quantity: item.Quantity,
 		Unit: item.Unit, UnitPriceCents: item.UnitPriceCents, Location: item.Location, LowStockThreshold: item.LowStockThreshold,
 		ExpiryDate: item.ExpiryDate, ShortLived: item.ShortLived, AutoConsumeAt: item.AutoConsumeAt, Notes: item.Notes,
 	}
 	if patch.Name != nil {
 		input.Name = *patch.Name
+	}
+	if patch.Spec != nil {
+		input.ProductSpec = ProductSpec{Spec: *patch.Spec}
 	}
 	if patch.Category != nil {
 		input.Category = *patch.Category

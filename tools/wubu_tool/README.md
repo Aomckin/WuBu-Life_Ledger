@@ -1,8 +1,8 @@
-# 物簿朝汐工具包 v0.1
+# 物簿朝汐工具包 v0.1.1
 
 独立的朝汐 SDK v1 ToolPackage，开发和测试均在物簿目录。朝汐项目保持只读，因此本次不安装或激活工具。
 
-入口：`wubu_tool.package:create_package`；包 ID：`wubu-tool`；工具名：`wubu`。
+入口：`wubu_tool.package:create_package`；包 ID：`wubu-tool`；工具：`record_purchase`、`validate_purchase`、`wubu_inventory_event`，以及兼容的高级 `wubu`。常用购买直接描述 name / spec / quantity / unit / price 和稳定幂等键，后端自动创建或复用商品；返回库存结果和需核对的警告。
 
 详见物簿仓库 `docs/ZHAOXI_INTEGRATION.md` 的接口、金额单位、幂等与后续接入说明。默认服务地址为 `http://127.0.0.1:8026`。
 

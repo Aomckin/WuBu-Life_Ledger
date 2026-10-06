@@ -5,15 +5,24 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"stockroom/internal/ledger"
+	"stockroom/internal/store"
 )
 
 func (a *API) registerLedger(m *http.ServeMux) {
 	m.HandleFunc("POST /api/v1/purchases", a.recordPurchase)
+	m.HandleFunc("POST /api/v1/purchases/record", a.agentPurchase(false))
+	m.HandleFunc("POST /api/v1/purchases/validate", a.agentPurchase(true))
+	for _, action := range []string{"consume", "adjust", "open", "finish", "discard"} {
+		m.HandleFunc("POST /api/v1/items/"+action, a.inventoryAction(strings.ToUpper(action)))
+	}
 	m.HandleFunc("GET /api/v1/purchases", a.listPurchases)
 	m.HandleFunc("GET /api/v1/purchases/{id}", a.getPurchase)
+	m.HandleFunc("PUT /api/v1/purchases/{id}", a.amendPurchase)
+	m.HandleFunc("DELETE /api/v1/purchases/{id}", a.deletePurchase)
 	m.HandleFunc("GET /api/v1/inventory", a.listItems)
 	m.HandleFunc("GET /api/v1/inventory-events", a.inventoryHistory)
 	m.HandleFunc("GET /api/v1/items/resolve", a.resolveItem)
@@ -38,6 +47,15 @@ func (a *API) registerLedger(m *http.ServeMux) {
 }
 
 func (a *API) ledgerError(w http.ResponseWriter, r *http.Request, e error) {
+	var resolution *store.ResolutionError
+	if errors.As(e, &resolution) {
+		status, action := 404, "create_or_resolve_item"
+		if resolution.Code == "ITEM_AMBIGUOUS" {
+			status, action = 409, "ask_user_to_select_candidate"
+		}
+		writeJSON(w, status, errorBody{Error: errorDetail{Code: resolution.Code, Message: resolution.Message, SuggestedAction: action, Candidates: resolution.Candidates}, RequestID: requestID(r.Context())})
+		return
+	}
 	switch {
 	case errors.Is(e, ledger.ErrInvalid):
 		a.errorResponse(w, r, 422, "validation_error", e.Error(), nil)
@@ -54,10 +72,47 @@ func replayHeader(w http.ResponseWriter, replay bool) {
 		w.Header().Set("Idempotency-Replayed", "true")
 	}
 }
+
+func (a *API) agentPurchase(validate bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input ledger.AgentPurchaseInput
+		if e := decodeJSON(w, r, &input); e != nil {
+			a.badJSON(w, r, e)
+			return
+		}
+		var out ledger.Purchase
+		var replay bool
+		var e error
+		if validate {
+			out, e = a.store.ValidatePurchase(r.Context(), input.PurchaseInput())
+		} else {
+			out, replay, e = a.store.RecordPurchase(r.Context(), r.Header.Get("Idempotency-Key"), input.PurchaseInput())
+		}
+		if e != nil {
+			a.ledgerError(w, r, e)
+			return
+		}
+		replayHeader(w, replay)
+		status := 201
+		if validate {
+			status = 200
+		}
+		writeJSON(w, status, map[string]any{"purchase_id": out.ID, "expense_amount": out.TotalAmount, "items": out.Items, "warnings": out.Warnings, "validation_status": out.ValidationStatus})
+	}
+}
 func (a *API) recordPurchase(w http.ResponseWriter, r *http.Request) {
 	var input ledger.PurchaseInput
 	if e := decodeJSON(w, r, &input); e != nil {
 		a.badJSON(w, r, e)
+		return
+	}
+	if r.URL.Query().Get("dry_run") == "true" {
+		out, e := a.store.ValidatePurchase(r.Context(), input)
+		if e != nil {
+			a.ledgerError(w, r, e)
+			return
+		}
+		writeJSON(w, 200, out)
 		return
 	}
 	out, replay, e := a.store.RecordPurchase(r.Context(), r.Header.Get("Idempotency-Key"), input)
@@ -75,6 +130,34 @@ func (a *API) getPurchase(w http.ResponseWriter, r *http.Request) {
 		a.ledgerError(w, r, e)
 		return
 	}
+	writeJSON(w, 200, out)
+}
+func (a *API) amendPurchase(w http.ResponseWriter, r *http.Request) {
+	var input ledger.PurchaseAmendment
+	if e := decodeJSON(w, r, &input); e != nil {
+		a.badJSON(w, r, e)
+		return
+	}
+	out, replay, e := a.store.AmendPurchase(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input)
+	if e != nil {
+		a.ledgerError(w, r, e)
+		return
+	}
+	replayHeader(w, replay)
+	writeJSON(w, 200, out)
+}
+func (a *API) deletePurchase(w http.ResponseWriter, r *http.Request) {
+	var input ledger.PurchaseDeletion
+	if e := decodeJSON(w, r, &input); e != nil {
+		a.badJSON(w, r, e)
+		return
+	}
+	out, replay, e := a.store.DeletePurchase(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input)
+	if e != nil {
+		a.ledgerError(w, r, e)
+		return
+	}
+	replayHeader(w, replay)
 	writeJSON(w, 200, out)
 }
 func (a *API) inventoryAction(action string) http.HandlerFunc {
@@ -285,7 +368,7 @@ func (a *API) resolveItem(w http.ResponseWriter, r *http.Request) {
 		a.ledgerError(w, r, e)
 		return
 	}
-	out, e := a.store.ResolveItem(r.Context(), name)
+	out, e := a.store.ResolveItem(r.Context(), name, r.URL.Query().Get("spec"))
 	if e != nil {
 		a.ledgerError(w, r, e)
 		return

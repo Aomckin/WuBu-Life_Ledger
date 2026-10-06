@@ -509,7 +509,7 @@ FROM intake_entries e JOIN intake_analyses a ON a.entry_id = e.id WHERE e.id = ?
 		if err != nil {
 			return 0, err
 		}
-		if found && !strings.EqualFold(item.Unit, unit) {
+		if found && inventory.UnitKey(item.Unit) != inventory.UnitKey(unit) {
 			return 0, fmt.Errorf("unit mismatch for %q: inbox says %s, inventory has %s", name, unit, item.Unit)
 		}
 		if !found {
@@ -529,10 +529,10 @@ FROM intake_entries e JOIN intake_analyses a ON a.entry_id = e.id WHERE e.id = ?
 			itemID := uuid.NewString()
 			if _, err := tx.ExecContext(ctx, `INSERT INTO items (
 id, name, category, icon, quantity, unit, location, low_stock_threshold, expiry_date, unit_price_cents,
-short_lived, auto_consume_at, notes, created_at, updated_at, version
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+short_lived, auto_consume_at, notes, created_at, updated_at, version,spec,package_size,package_unit
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1,?,?,?)`,
 				itemID, input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
-				input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, now); err != nil {
+				input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, now, input.Spec, input.PackageSize, input.PackageUnit); err != nil {
 				return 0, fmt.Errorf("create inbox item: %w", err)
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE inventory_events SET source='intake',note=? WHERE rowid=(SELECT MAX(rowid) FROM inventory_events WHERE item_id=?)`, "Intake entry "+entryID, itemID); err != nil {
@@ -593,29 +593,14 @@ type inboxItemMatch struct {
 }
 
 func lookupInboxItem(tx *sql.Tx, ctx context.Context, name string) (inboxItemMatch, bool, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id, unit FROM items WHERE name = ? COLLATE NOCASE ORDER BY created_at LIMIT 2`, name)
-	if err != nil {
-		return inboxItemMatch{}, false, fmt.Errorf("find inbox item: %w", err)
-	}
-	defer rows.Close()
-	matches := []inboxItemMatch{}
-	for rows.Next() {
-		var match inboxItemMatch
-		if err := rows.Scan(&match.ID, &match.Unit); err != nil {
-			return inboxItemMatch{}, false, fmt.Errorf("scan inbox item: %w", err)
-		}
-		matches = append(matches, match)
-	}
-	if err := rows.Err(); err != nil {
-		return inboxItemMatch{}, false, fmt.Errorf("iterate inbox items: %w", err)
-	}
-	if len(matches) > 1 {
-		return inboxItemMatch{}, false, fmt.Errorf("multiple inventory items match %q", name)
-	}
-	if len(matches) == 0 {
+	item, err := resolveTarget(ctx, tx, itemTarget{Name: name})
+	if errors.Is(err, ErrNotFound) {
 		return inboxItemMatch{}, false, nil
 	}
-	return matches[0], true, nil
+	if err != nil {
+		return inboxItemMatch{}, false, err
+	}
+	return inboxItemMatch{item.ID, item.Unit}, true, nil
 }
 
 func (s *Store) listIntakeAttachments(ctx context.Context, entryID string) ([]intake.Attachment, error) {

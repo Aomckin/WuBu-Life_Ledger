@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Personal money and item lifecycle database based on Stockroom. One purchase transaction updates money, items, stock and history. CNY only. Bind to loopback by default. Optional AI Intake changes inventory only; use purchases to record expenses."
   },
   "servers": [
@@ -1065,7 +1065,7 @@
         ],
         "operationId": "record_purchase_event",
         "summary": "record purchase event",
-        "description": "Atomic PurchaseEvent + Expense + PurchaseItem + inventory/history or durable details. No forced equality of item_total and total_amount. Explicit unit/item-type conflicts rollback. Consumables resolve exact name, exact alias, normalized alias/name; ambiguous names need item_id. Each new durable line creates a separate instance.",
+        "description": "一个事务内统一解析名称、规格和别名，自动创建新消耗品，记录购买、支出、库存与完整事件。返回金额/规格 Warning 和库存摘要。名称歧义返回 ITEM_AMBIGUOUS 候选，失败不保留幂等键。",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1077,6 +1077,15 @@
               "maxLength": 200
             },
             "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "true 时执行解析和验证，不写数据库或幂等键。"
           }
         ],
         "responses": {
@@ -1119,6 +1128,16 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "Dry-run validation only; no writes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1296,6 +1315,152 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ledger"
+        ],
+        "operationId": "amend_purchase_event",
+        "summary": "修改整笔购买记录",
+        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "操作成功；同一幂等键与参数重试返回同一结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseAmendment"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ledger"
+        ],
+        "operationId": "delete_purchase_event",
+        "summary": "删除购买记录并撤销费用及库存贡献",
+        "description": "逻辑删除并保留操作审计及库存历史，从购买列表、价格历史和费用合计中移除。库存不足或耐用品已有维护/生命周期记录返回 409，全部回滚。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "操作成功；同一幂等键与参数重试返回同一结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseDeletionResult"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseDeletion"
+              }
+            }
           }
         }
       }
@@ -2600,7 +2765,7 @@
         ],
         "operationId": "resolve_item",
         "summary": "resolve item",
-        "description": "Exact item name, then exact alias, then normalized alias/name. Duplicate matches return 409.",
+        "description": "统一 ItemResolver：名称加规格、别名、归一化、高置信唯一候选；歧义返回候选；无匹配返回 ITEM_NOT_FOUND。支持 2L 与 2000ml 的等价规格。",
         "parameters": [
           {
             "name": "name",
@@ -2610,6 +2775,15 @@
               "type": "string",
               "maxLength": 100,
               "minLength": 1
+            }
+          },
+          {
+            "name": "spec",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
             }
           }
         ],
@@ -2912,6 +3086,503 @@
           }
         }
       }
+    },
+    "/api/v1/purchases/record": {
+      "post": {
+        "tags": [
+          "Ledger"
+        ],
+        "operationId": "record_purchase",
+        "summary": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。",
+        "description": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "201": {
+            "description": "Success; inspect warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPurchaseSummary"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPurchaseInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchases/validate": {
+      "post": {
+        "tags": [
+          "Ledger"
+        ],
+        "operationId": "validate_purchase",
+        "summary": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。",
+        "description": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。",
+        "parameters": [],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "Success; inspect warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPurchaseSummary"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPurchaseInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/consume": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "consume_by_name",
+        "summary": "按商品名、规格或别名consume",
+        "description": "使用统一 ItemResolver；不会创建不存在的库存。歧义返回 ITEM_AMBIGUOUS 及候选。Idempotency-Key 保留相同键和参数重试。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamedConsumeInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/adjust": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "adjust_by_name",
+        "summary": "按商品名、规格或别名adjust",
+        "description": "使用统一 ItemResolver；不会创建不存在的库存。歧义返回 ITEM_AMBIGUOUS 及候选。Idempotency-Key 保留相同键和参数重试。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamedAdjustInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/open": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "open_by_name",
+        "summary": "按商品名、规格或别名open",
+        "description": "使用统一 ItemResolver；不会创建不存在的库存。歧义返回 ITEM_AMBIGUOUS 及候选。Idempotency-Key 保留相同键和参数重试。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamedOpenInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/finish": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "finish_by_name",
+        "summary": "按商品名、规格或别名finish",
+        "description": "使用统一 ItemResolver；不会创建不存在的库存。歧义返回 ITEM_AMBIGUOUS 及候选。Idempotency-Key 保留相同键和参数重试。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamedFinishInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/discard": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "discard_by_name",
+        "summary": "按商品名、规格或别名discard",
+        "description": "使用统一 ItemResolver；不会创建不存在的库存。歧义返回 ITEM_AMBIGUOUS 及候选。Idempotency-Key 保留相同键和参数重试。",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamedDiscardInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3158,6 +3829,27 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "package_unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
+          },
+          "inventory_unit": {
+            "type": "string",
+            "description": "库存计数单位；与兼容字段 unit 相同，例如瓶。"
           }
         }
       },
@@ -3238,6 +3930,27 @@
             "type": "string",
             "maxLength": 500,
             "default": ""
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "package_unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
+          },
+          "inventory_unit": {
+            "type": "string",
+            "description": "与 unit 同义；同时提供时必须一致。"
           }
         }
       },
@@ -3311,6 +4024,11 @@
           "notes": {
             "type": "string",
             "maxLength": 500
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
           }
         }
       },
@@ -4007,7 +4725,9 @@
             "type": "object",
             "required": [
               "code",
-              "message"
+              "message",
+              "retryable",
+              "suggested_action"
             ],
             "properties": {
               "code": {
@@ -4021,11 +4741,29 @@
                 "additionalProperties": {
                   "type": "string"
                 }
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "suggested_action": {
+                "type": "string"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ItemCandidate"
+                }
               }
             }
           },
           "request_id": {
             "type": "string"
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "ERROR"
+            ]
           }
         }
       },
@@ -4034,7 +4772,8 @@
         "properties": {
           "name": {
             "type": "string",
-            "maxLength": 80
+            "maxLength": 80,
+            "description": "商品基础名称，例如无糖可乐；旧的名称加规格输入会自动拆分。"
           },
           "item_id": {
             "type": "string",
@@ -4045,11 +4784,13 @@
             "minimum": 0,
             "maximum": 1000000000,
             "multipleOf": 0.001,
-            "exclusiveMinimum": 0
+            "exclusiveMinimum": 0,
+            "description": "购买数量，例如 1 瓶的数量为 1；不能用规格容量 2L 替代数量。"
           },
           "unit": {
             "type": "string",
-            "maxLength": 20
+            "maxLength": 20,
+            "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
           },
           "unit_price": {
             "type": "number",
@@ -4072,7 +4813,8 @@
               "UNTRACKED"
             ],
             "type": "string",
-            "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id."
+            "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id.",
+            "default": "CONSUMABLE"
           },
           "category": {
             "$ref": "#/components/schemas/Category"
@@ -4108,6 +4850,36 @@
           "warranty_until": {
             "type": "string",
             "format": "date"
+          },
+          "id": {
+            "type": "string",
+            "description": "改单保留原商品行 id；新增行不传 id。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "package_unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
+          },
+          "quantity_added": {
+            "type": "number",
+            "readOnly": true
+          },
+          "inventory_after": {
+            "type": "number",
+            "readOnly": true,
+            "description": "写入完成时的库存快照，幂等重放返回原快照。"
           }
         },
         "required": [
@@ -4115,8 +4887,7 @@
           "quantity",
           "unit",
           "unit_price",
-          "subtotal",
-          "item_type"
+          "subtotal"
         ],
         "additionalProperties": false
       },
@@ -4155,7 +4926,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -4235,7 +5007,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -4289,6 +5062,25 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "purchase_id": {
+            "type": "string"
+          },
+          "expense_amount": {
+            "type": "number"
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "VALID",
+              "WARNING"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseWarning"
+            }
           }
         },
         "required": [
@@ -4383,6 +5175,15 @@
           "id": {
             "type": "string",
             "maxLength": 200
+          },
+          "quantity_added": {
+            "type": "number",
+            "readOnly": true
+          },
+          "inventory_after": {
+            "type": "number",
+            "readOnly": true,
+            "description": "写入完成时的库存快照，幂等重放返回原快照。"
           }
         },
         "required": [
@@ -4408,13 +5209,24 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
           }
         },
         "additionalProperties": false
@@ -4432,7 +5244,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -4446,6 +5259,16 @@
             "maximum": 1000000000,
             "multipleOf": 0.001,
             "exclusiveMinimum": 0
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
           }
         },
         "required": [
@@ -4466,7 +5289,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -4485,6 +5309,16 @@
             "minimum": 0,
             "maximum": 1000000000,
             "multipleOf": 0.001
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
           }
         },
         "additionalProperties": false,
@@ -4606,7 +5440,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -4657,7 +5492,8 @@
               "manual",
               "agent",
               "import",
-              "receipt"
+              "receipt",
+              "system"
             ],
             "default": "manual"
           },
@@ -5148,6 +5984,520 @@
         },
         "required": [
           "items"
+        ]
+      },
+      "PurchaseAmendment": {
+        "type": "object",
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "purchased_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "CNY"
+            ],
+            "default": "CNY"
+          },
+          "payment_method": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "discount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+          },
+          "extra_fee": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/PurchaseLine"
+            }
+          },
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+          }
+        },
+        "required": [
+          "total_amount",
+          "items",
+          "expected_updated_at",
+          "source",
+          "external_id"
+        ],
+        "additionalProperties": false,
+        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。"
+      },
+      "PurchaseDeletion": {
+        "type": "object",
+        "properties": {
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+          }
+        },
+        "required": [
+          "expected_updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "PurchaseDeletionResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ]
+      },
+      "PurchaseWarning": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "PURCHASE_AMOUNT_INCONSISTENT",
+              "SPEC_QUANTITY_CONFLICT"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ItemCandidate": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "spec",
+          "unit",
+          "current_quantity"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "current_quantity": {
+            "type": "number"
+          }
+        }
+      },
+      "AgentPurchaseLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000.0,
+            "multipleOf": 0.001
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000.0,
+            "multipleOf": 0.01,
+            "description": "每库存单位单价，元。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        }
+      },
+      "AgentPurchaseInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/AgentPurchaseLine"
+            }
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000.0,
+            "multipleOf": 0.01,
+            "description": "实际付款（元）；省略按单价乘数量合计；仅有一个商品且省略价格时按总价推导。"
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "payment_method": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "AgentPurchaseSummary": {
+        "type": "object",
+        "required": [
+          "purchase_id",
+          "expense_amount",
+          "items",
+          "warnings",
+          "validation_status"
+        ],
+        "properties": {
+          "purchase_id": {
+            "type": "string"
+          },
+          "expense_amount": {
+            "type": "number"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseLineResult"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseWarning"
+            }
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "VALID",
+              "WARNING"
+            ]
+          }
+        }
+      },
+      "NamedConsumeInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "multipleOf": 0.001,
+            "exclusiveMinimum": 0
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        },
+        "required": [
+          "name",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "NamedAdjustInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "delta": {
+            "type": "number",
+            "minimum": -1000000000,
+            "maximum": 1000000000,
+            "multipleOf": 0.001
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "multipleOf": 0.001
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "delta"
+            ],
+            "not": {
+              "required": [
+                "quantity"
+              ]
+            }
+          },
+          {
+            "required": [
+              "quantity"
+            ],
+            "not": {
+              "required": [
+                "delta"
+              ]
+            }
+          }
+        ],
+        "required": [
+          "name"
+        ]
+      },
+      "NamedOpenInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "NamedFinishInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "NamedDiscardInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "receipt",
+              "system"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "按名称操作时的商品名或别名。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
         ]
       }
     }

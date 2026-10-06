@@ -44,14 +44,18 @@ type API struct {
 }
 
 type errorBody struct {
-	Error     errorDetail `json:"error"`
-	RequestID string      `json:"request_id"`
+	Error            errorDetail `json:"error"`
+	RequestID        string      `json:"request_id"`
+	ValidationStatus string      `json:"validation_status,omitempty"`
 }
 
 type errorDetail struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Fields  map[string]string `json:"fields,omitempty"`
+	Code            string                `json:"code"`
+	Message         string                `json:"message"`
+	Fields          map[string]string     `json:"fields,omitempty"`
+	Retryable       bool                  `json:"retryable"`
+	SuggestedAction string                `json:"suggested_action"`
+	Candidates      []store.ItemCandidate `json:"candidates,omitempty"`
 }
 
 type contextKey string
@@ -411,7 +415,11 @@ func (a *API) handleStoreError(w http.ResponseWriter, r *http.Request, err error
 	case errors.Is(err, ledger.ErrConflict):
 		a.errorResponse(w, r, http.StatusConflict, "ledger_conflict", err.Error(), nil)
 	case errors.Is(err, store.ErrNotFound):
-		a.errorResponse(w, r, http.StatusNotFound, "not_found", "Item not found.", nil)
+		code, message := "ITEM_NOT_FOUND", "未找到物品，请核对名称或规格。"
+		if strings.HasPrefix(r.URL.Path, "/api/v1/purchases/") {
+			code, message = "PURCHASE_NOT_FOUND", "未找到购买记录，可能已被删除。"
+		}
+		a.errorResponse(w, r, http.StatusNotFound, code, message, nil)
 	case errors.Is(err, store.ErrNegativeQuantity):
 		a.errorResponse(w, r, http.StatusConflict, "negative_quantity", "Adjustment would make quantity negative.", nil)
 	default:
@@ -433,8 +441,21 @@ func (a *API) internalError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (a *API) errorResponse(w http.ResponseWriter, r *http.Request, status int, code, message string, fields map[string]string) {
+	action := "correct_request"
+	if status >= 500 {
+		action = "retry_with_same_idempotency_key"
+	}
+	if code == "idempotency_conflict" {
+		action = "use_original_request_or_new_key_for_new_event"
+	}
+	if code == "ledger_conflict" || code == "negative_quantity" {
+		action = "review_current_inventory"
+	}
+	if code == "ITEM_NOT_FOUND" {
+		action = "create_or_resolve_item"
+	}
 	writeJSON(w, status, errorBody{
-		Error: errorDetail{Code: code, Message: message, Fields: fields}, RequestID: requestID(r.Context()),
+		Error: errorDetail{Code: code, Message: message, Fields: fields, Retryable: status >= 500, SuggestedAction: action}, RequestID: requestID(r.Context()), ValidationStatus: "ERROR",
 	})
 }
 

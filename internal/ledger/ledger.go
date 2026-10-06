@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"strings"
 	"time"
-	"unicode"
 
 	"stockroom/internal/inventory"
 )
@@ -55,31 +54,59 @@ type PurchaseInput struct {
 	Items         []PurchaseLine `json:"items"`
 }
 type PurchaseLine struct {
-	ID            string   `json:"id,omitempty"`
-	ItemID        string   `json:"item_id,omitempty"`
-	Name          string   `json:"name"`
-	Quantity      float64  `json:"quantity"`
-	Unit          string   `json:"unit"`
-	UnitPrice     Money    `json:"unit_price"`
-	Subtotal      Money    `json:"subtotal"`
-	ItemType      string   `json:"item_type"`
-	Category      string   `json:"category,omitempty"`
-	Location      string   `json:"location,omitempty"`
-	Confidence    *float64 `json:"confidence,omitempty"`
-	Note          string   `json:"note,omitempty"`
-	Brand         string   `json:"brand,omitempty"`
-	Model         string   `json:"model,omitempty"`
-	SerialNumber  string   `json:"serial_number,omitempty"`
-	WarrantyUntil string   `json:"warranty_until,omitempty"`
+	inventory.ProductSpec
+	QuantityAdded  float64  `json:"quantity_added,omitempty"`
+	InventoryAfter *float64 `json:"inventory_after,omitempty"`
+	ID             string   `json:"id,omitempty"`
+	ItemID         string   `json:"item_id,omitempty"`
+	Name           string   `json:"name"`
+	Quantity       float64  `json:"quantity"`
+	Unit           string   `json:"unit"`
+	UnitPrice      Money    `json:"unit_price"`
+	Subtotal       Money    `json:"subtotal"`
+	ItemType       string   `json:"item_type"`
+	Category       string   `json:"category,omitempty"`
+	Location       string   `json:"location,omitempty"`
+	Confidence     *float64 `json:"confidence,omitempty"`
+	Note           string   `json:"note,omitempty"`
+	Brand          string   `json:"brand,omitempty"`
+	Model          string   `json:"model,omitempty"`
+	SerialNumber   string   `json:"serial_number,omitempty"`
+	WarrantyUntil  string   `json:"warranty_until,omitempty"`
 }
 type Purchase struct {
 	ID string `json:"id"`
 	PurchaseInput
-	ItemTotal Money  `json:"item_total"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ItemTotal        Money     `json:"item_total"`
+	CreatedAt        string    `json:"created_at"`
+	UpdatedAt        string    `json:"updated_at"`
+	PurchaseID       string    `json:"purchase_id"`
+	ExpenseAmount    Money     `json:"expense_amount"`
+	ValidationStatus string    `json:"validation_status"`
+	Warnings         []Warning `json:"warnings"`
+}
+
+type Warning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Line    *int   `json:"line,omitempty"`
+}
+
+// Amendments replace the entire purchase; IDs retain existing line identities.
+type PurchaseAmendment struct {
+	PurchaseInput
+	ExpectedUpdatedAt string `json:"expected_updated_at"`
+}
+type PurchaseDeletion struct {
+	ExpectedUpdatedAt string `json:"expected_updated_at"`
+}
+type PurchaseDeletionResult struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }
 type InventoryInput struct {
+	Name string `json:"name,omitempty"`
+	Spec string `json:"spec,omitempty"`
 	// Delta is for legacy /adjust; Quantity is consume amount or absolute stock.
 	Delta      *float64 `json:"delta,omitempty"`
 	Quantity   *float64 `json:"quantity,omitempty"`
@@ -183,15 +210,15 @@ type Dashboard struct {
 }
 
 func NormalizeName(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsSpace(r) || unicode.IsPunct(r) {
-			return -1
-		}
-		if r >= 0xff01 && r <= 0xff5e {
-			r -= 0xfee0
-		}
-		return unicode.ToLower(r)
-	}, strings.TrimSpace(s))
+	name, p, e := inventory.NormalizeProduct(s, inventory.ProductSpec{})
+	if e != nil {
+		return inventory.NameKey(s)
+	}
+	key := inventory.NameKey(name)
+	if p.Spec != "" {
+		key += "#" + inventory.SpecKey(p.Spec)
+	}
+	return key
 }
 func Timestamp(s string) (string, error) {
 	if s == "" {
@@ -208,7 +235,7 @@ func Source(s string) (string, error) {
 		s = "manual"
 	}
 	switch s {
-	case "manual", "agent", "import", "receipt":
+	case "manual", "agent", "import", "system", "receipt":
 		return s, nil
 	}
 	return "", fmt.Errorf("%w: unsupported source", ErrInvalid)
@@ -245,8 +272,17 @@ func ValidatePurchase(p PurchaseInput) (PurchaseInput, error) {
 	for i := range p.Items {
 		l := &p.Items[i]
 		l.ID = ""
+		l.QuantityAdded = 0
+		l.InventoryAfter = nil
 		l.Name = strings.TrimSpace(l.Name)
+		l.Name, l.ProductSpec, e = inventory.NormalizeProduct(l.Name, l.ProductSpec)
+		if e != nil {
+			return p, fmt.Errorf("%w: %s", ErrInvalid, e)
+		}
 		l.ItemType = strings.ToUpper(l.ItemType)
+		if l.ItemType == "" {
+			l.ItemType = Consumable
+		}
 		if l.ItemType != Consumable && l.ItemType != Durable && l.ItemType != Untracked {
 			return p, fmt.Errorf("%w: unsupported item_type", ErrInvalid)
 		}

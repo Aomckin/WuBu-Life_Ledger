@@ -47,7 +47,7 @@ window.WubuZh = (() => {
   function error(detail, status) {
     if (detail instanceof Error && detail.detail) return error(detail.detail, detail.status);
     const message = typeof detail === "string" ? detail : detail?.message || "";
-    if (/[\u3400-\u9fff]/.test(message)) return message;
+    if (/[\u3400-\u9fff]/.test(message)) return message.replace(/^(invalid ledger input|ledger conflict):\s*/, "");
     if (reasons[message]) return reasons[message];
     if (detail?.fields && Object.keys(detail.fields).length) {
       return Object.entries(detail.fields).map(([field, value]) => fieldMessage(field, value)).join(" ");
@@ -58,15 +58,17 @@ window.WubuZh = (() => {
   }
   function setEditable(input, value, kind) {
     input.dataset.original = value || "";
-    input.dataset.display = (kind === "unit" ? units : locations)[value] || value || "";
+    input.dataset.display = (kind === "unit" ? units[value] || units[(value || "").toLowerCase()] : locations[value]) || value || "";
     input.value = input.dataset.display;
   }
   function originalValue(input) {
     return input.value === input.dataset.display ? input.dataset.original : input.value;
   }
   return Object.freeze({
+    product: item => item ? [item.name, item.spec].filter(Boolean).join(" ") : "",
+    commonUnits: Object.freeze(["瓶", "罐", "升", "毫升", "个", "包", "盒", "袋", "箱", "杯", "支", "卷", "片", "克", "千克", "件", "套", "份"]),
     category: value => categories[value] || value,
-    unit: value => units[value] || value,
+    unit: value => units[value] || units[(value || "").toLowerCase()] || value,
     location: value => locations[value] || value,
     intent: value => intents[value] || value,
     payment: value => payments[(value || "").toLowerCase()] || value,

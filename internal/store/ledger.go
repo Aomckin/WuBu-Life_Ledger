@@ -92,7 +92,7 @@ func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.Pur
 		for _, l := range p.Items {
 			out.ItemTotal += l.Subtotal
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO purchase_events VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, p.Merchant, p.PurchasedAt, p.TotalAmount, out.ItemTotal, p.Discount, p.ExtraFee, p.Currency, p.PaymentMethod, p.Source, p.ExternalID, p.Category, p.Note, now, now)
+		_, e = tx.ExecContext(ctx, `INSERT INTO purchase_events(id,merchant,purchased_at,total_cents,item_total_cents,discount_cents,extra_fee_cents,currency,payment_method,source,external_id,category,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, p.Merchant, p.PurchasedAt, p.TotalAmount, out.ItemTotal, p.Discount, p.ExtraFee, p.Currency, p.PaymentMethod, p.Source, p.ExternalID, p.Category, p.Note, now, now)
 		if e != nil {
 			return e
 		}
@@ -100,67 +100,11 @@ func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.Pur
 			return e
 		}
 		for i := range out.Items {
-			l := &out.Items[i]
-			l.ID = uuid.NewString()
-			if l.ItemType != ledger.Untracked {
-				var item inventory.Item
-				if l.ItemID != "" {
-					item, e = getTxItem(ctx, tx, l.ItemID)
-				} else if l.ItemType == ledger.Consumable {
-					item, e = resolveTxItem(ctx, tx, l.Name)
-				} else {
-					e = ErrNotFound
-				}
-				if errors.Is(e, ErrNotFound) && l.ItemID == "" {
-					item.ID = uuid.NewString()
-					qty := 0.0
-					if l.ItemType == ledger.Durable {
-						qty = 1
-					}
-					_, e = tx.ExecContext(ctx, `INSERT INTO items(id,name,category,icon,quantity,unit,location,unit_price_cents,notes,created_at,updated_at,item_type) VALUES(?,?,?,'inventory_2',?,?,?,?,?,?,?,?)`, item.ID, l.Name, l.Category, qty, l.Unit, l.Location, l.UnitPrice, l.Note, now, now, l.ItemType)
-					if e != nil {
-						return e
-					}
-					item, e = getTxItem(ctx, tx, item.ID)
-				}
-				if e != nil {
-					return e
-				}
-				if item.ItemType != l.ItemType || !strings.EqualFold(item.Unit, l.Unit) {
-					return fmt.Errorf("%w: item type or unit mismatch for %s", ledger.ErrConflict, l.Name)
-				}
-				l.ItemID = item.ID
-				if l.ItemType == ledger.Consumable {
-					d := l.Quantity
-					eventInput := ledger.InventoryInput{Delta: &d, OccurredAt: p.PurchasedAt, Source: p.Source, Note: l.Note}
-					if _, e = mutateInventory(ctx, tx, item.ID, "PURCHASE", eventInput, &out.ID); e != nil {
-						return e
-					}
-					if _, e = tx.ExecContext(ctx, `UPDATE items SET unit_price_cents=? WHERE id=?`, l.UnitPrice, item.ID); e != nil {
-						return e
-					}
-				} else {
-					var count int
-					if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM durable_details WHERE item_id=?`, item.ID).Scan(&count); e != nil {
-						return e
-					}
-					if count > 0 {
-						return fmt.Errorf("%w: durable instance already has a purchase", ledger.ErrConflict)
-					}
-					if _, e = tx.ExecContext(ctx, `INSERT INTO durable_details(item_id,brand,model,serial_number,purchase_date,warranty_until,note) VALUES(?,?,?,?,?,?,?)`, item.ID, l.Brand, l.Model, l.SerialNumber, p.PurchasedAt, l.WarrantyUntil, l.Note); e != nil {
-						return e
-					}
-				}
-			}
-			var itemID any
-			if l.ItemID != "" {
-				itemID = l.ItemID
-			}
-			if _, e = tx.ExecContext(ctx, `INSERT INTO purchase_items VALUES(?,?,?,?,?,?,?,?,?,?,?)`, l.ID, out.ID, itemID, l.Name, l.Quantity, l.Unit, l.UnitPrice, l.Subtotal, l.ItemType, l.Confidence, l.Note); e != nil {
+			if e = insertPurchaseLine(ctx, tx, &out, &out.Items[i], now); e != nil {
 				return e
 			}
 		}
-		return nil
+		return completePurchase(ctx, tx, &out)
 	})
 	return out, replay, err
 }
@@ -173,79 +117,17 @@ func getTxItem(ctx context.Context, tx *sql.Tx, id string) (inventory.Item, erro
 	return item, e
 }
 
-func resolveTxItem(ctx context.Context, tx *sql.Tx, name string) (inventory.Item, error) {
-	// Respect match precedence; never pick the first of several ambiguous matches.
-	queries := []struct {
-		q    string
-		args []any
-	}{
-		{`SELECT id FROM items WHERE name=? COLLATE NOCASE`, []any{strings.TrimSpace(name)}},
-		{`SELECT item_id FROM product_aliases WHERE alias=? COLLATE NOCASE`, []any{strings.TrimSpace(name)}},
-		{`SELECT item_id FROM product_aliases WHERE normalized_alias=?`, []any{ledger.NormalizeName(name)}},
-	}
-	for _, q := range queries {
-		rows, e := tx.QueryContext(ctx, q.q, q.args...)
-		if e != nil {
-			return inventory.Item{}, e
-		}
-		ids := map[string]bool{}
-		for rows.Next() {
-			var id string
-			if e = rows.Scan(&id); e != nil {
-				rows.Close()
-				return inventory.Item{}, e
-			}
-			ids[id] = true
-		}
-		e = rows.Err()
-		rows.Close()
-		if e != nil {
-			return inventory.Item{}, e
-		}
-		if len(ids) > 1 {
-			return inventory.Item{}, fmt.Errorf("%w: ambiguous item name; specify item_id", ledger.ErrConflict)
-		}
-		for id := range ids {
-			return getTxItem(ctx, tx, id)
-		}
-	}
-	rows, e := tx.QueryContext(ctx, `SELECT id,name FROM items`)
-	if e != nil {
-		return inventory.Item{}, e
-	}
-	ids := []string{}
-	for rows.Next() {
-		var id, n string
-		if e = rows.Scan(&id, &n); e != nil {
-			rows.Close()
-			return inventory.Item{}, e
-		}
-		if ledger.NormalizeName(n) == ledger.NormalizeName(name) {
-			ids = append(ids, id)
-		}
-	}
-	e = rows.Err()
-	rows.Close()
-	if e != nil {
-		return inventory.Item{}, e
-	}
-	if len(ids) > 1 {
-		return inventory.Item{}, fmt.Errorf("%w: ambiguous normalized item name", ledger.ErrConflict)
-	}
-	if len(ids) == 1 {
-		return getTxItem(ctx, tx, ids[0])
-	}
-	return inventory.Item{}, ErrNotFound
-}
-
 func (s *Store) InventoryAction(ctx context.Context, key, id, action string, input ledger.InventoryInput) (ledger.InventoryResult, bool, error) {
 	var out ledger.InventoryResult
 	replay, e := s.ledgerTx(ctx, key, action+":"+id, input, &out, func(tx *sql.Tx) error {
 		if err := applyDueTx(ctx, tx); err != nil {
 			return err
 		}
-		var e error
-		out, e = mutateInventory(ctx, tx, id, action, input, nil)
+		item, e := resolveTarget(ctx, tx, itemTarget{ID: id, Name: input.Name, Spec: input.Spec})
+		if e != nil {
+			return e
+		}
+		out, e = mutateInventory(ctx, tx, item.ID, action, input, nil)
 		return e
 	})
 	return out, replay, e
@@ -398,4 +280,92 @@ func applyDueTx(ctx context.Context, tx *sql.Tx) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := tx.ExecContext(ctx, `UPDATE items SET quantity=0,auto_consume_at=NULL,updated_at=?,version=version+1 WHERE short_lived=1 AND auto_consume_at IS NOT NULL AND julianday(auto_consume_at)<=julianday(?)`, now, now)
 	return err
+}
+
+func insertPurchaseLine(ctx context.Context, tx *sql.Tx, purchase *ledger.Purchase, l *ledger.PurchaseLine, now string) error {
+	var e error
+
+	if l.ID == "" {
+		l.ID = uuid.NewString()
+	}
+	if l.ItemType != ledger.Untracked {
+		var item inventory.Item
+		if l.ItemID != "" {
+			item, e = resolveTarget(ctx, tx, itemTarget{ID: l.ItemID, Spec: l.Spec})
+		} else if l.ItemType == ledger.Consumable {
+			item, e = resolveTarget(ctx, tx, itemTarget{Name: l.Name, Spec: l.Spec})
+		} else {
+			e = ErrNotFound
+		}
+		if errors.Is(e, ErrNotFound) && l.ItemID == "" {
+			item.ID = uuid.NewString()
+			qty := 0.0
+			_, e = tx.ExecContext(ctx, `INSERT INTO items(id,name,category,icon,quantity,unit,location,unit_price_cents,notes,created_at,updated_at,item_type,spec,package_size,package_unit) VALUES(?,?,?,'inventory_2',?,?,?,?,?,?,?,?,?,?,?)`, item.ID, l.Name, l.Category, qty, l.Unit, l.Location, l.UnitPrice, l.Note, now, now, l.ItemType, l.Spec, l.PackageSize, l.PackageUnit)
+			if e != nil {
+				return e
+			}
+			item, e = getTxItem(ctx, tx, item.ID)
+		}
+		if e != nil {
+			return e
+		}
+		if item.ItemType != l.ItemType || inventory.UnitKey(item.Unit) != inventory.UnitKey(l.Unit) {
+			return fmt.Errorf("%w: item type or unit mismatch for %s", ledger.ErrConflict, l.Name)
+		}
+		l.ItemID = item.ID
+		l.Name, l.ProductSpec, l.Unit = item.Name, item.ProductSpec, item.Unit
+		if l.ItemType == ledger.Durable && item.Quantity != 0 {
+			return fmt.Errorf("%w: 耐用品实例已有库存，不能重复入库", ledger.ErrConflict)
+		}
+		{
+			d := l.Quantity
+			eventInput := ledger.InventoryInput{Delta: &d, OccurredAt: purchase.PurchasedAt, Source: purchase.Source, Note: l.Note}
+			result, err := mutateInventory(ctx, tx, item.ID, "PURCHASE", eventInput, &purchase.ID)
+			e = err
+			if e != nil {
+				return e
+			}
+			l.QuantityAdded = l.Quantity
+			l.InventoryAfter = &result.Item.Quantity
+			if _, e = tx.ExecContext(ctx, `UPDATE items SET unit_price_cents=? WHERE id=?`, l.UnitPrice, item.ID); e != nil {
+				return e
+			}
+		}
+		if l.ItemType == ledger.Durable {
+			var count int
+			if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM durable_details WHERE item_id=?`, item.ID).Scan(&count); e != nil {
+				return e
+			}
+			if count > 0 {
+				return fmt.Errorf("%w: durable instance already has a purchase", ledger.ErrConflict)
+			}
+			if _, e = tx.ExecContext(ctx, `INSERT INTO durable_details(item_id,brand,model,serial_number,purchase_date,warranty_until,note) VALUES(?,?,?,?,?,?,?)`, item.ID, l.Brand, l.Model, l.SerialNumber, purchase.PurchasedAt, l.WarrantyUntil, l.Note); e != nil {
+				return e
+			}
+		}
+	}
+	var itemID any
+	if l.ItemID != "" {
+		itemID = l.ItemID
+	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO purchase_items(id,purchase_event_id,item_id,raw_name,quantity,unit,unit_price_cents,subtotal_cents,item_type,confidence,note,spec,package_size,package_unit) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, l.ID, purchase.ID, itemID, l.Name, l.Quantity, l.Unit, l.UnitPrice, l.Subtotal, l.ItemType, l.Confidence, l.Note, l.Spec, l.PackageSize, l.PackageUnit); e != nil {
+		return e
+	}
+	return nil
+}
+
+func completePurchase(ctx context.Context, tx *sql.Tx, p *ledger.Purchase) error {
+	for i := range p.Items {
+		l := &p.Items[i]
+		if l.ItemID == "" {
+			continue
+		}
+		item, e := getTxItem(ctx, tx, l.ItemID)
+		if e != nil {
+			return e
+		}
+		l.InventoryAfter = &item.Quantity
+	}
+	ledger.DecoratePurchase(p)
+	return nil
 }

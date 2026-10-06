@@ -40,16 +40,24 @@ func page(f ledger.HistoryFilter) (int, int) {
 	return f.Limit, f.Offset
 }
 
+type purchaseReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
 func (s *Store) GetPurchase(ctx context.Context, id string) (ledger.Purchase, error) {
+	return getPurchase(ctx, s.db, id)
+}
+func getPurchase(ctx context.Context, db purchaseReader, id string) (ledger.Purchase, error) {
 	var p ledger.Purchase
-	e := s.db.QueryRowContext(ctx, `SELECT id,merchant,purchased_at,total_cents,item_total_cents,discount_cents,extra_fee_cents,currency,payment_method,source,external_id,category,note,created_at,updated_at FROM purchase_events WHERE id=?`, id).Scan(&p.ID, &p.Merchant, &p.PurchasedAt, &p.TotalAmount, &p.ItemTotal, &p.Discount, &p.ExtraFee, &p.Currency, &p.PaymentMethod, &p.Source, &p.ExternalID, &p.Category, &p.Note, &p.CreatedAt, &p.UpdatedAt)
+	e := db.QueryRowContext(ctx, `SELECT id,merchant,purchased_at,total_cents,item_total_cents,discount_cents,extra_fee_cents,currency,payment_method,source,external_id,category,note,created_at,updated_at FROM purchase_events WHERE id=? AND deleted_at IS NULL`, id).Scan(&p.ID, &p.Merchant, &p.PurchasedAt, &p.TotalAmount, &p.ItemTotal, &p.Discount, &p.ExtraFee, &p.Currency, &p.PaymentMethod, &p.Source, &p.ExternalID, &p.Category, &p.Note, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(e, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}
 	if e != nil {
 		return p, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,COALESCE(item_id,''),raw_name,quantity,unit,unit_price_cents,subtotal_cents,item_type,confidence,note FROM purchase_items WHERE purchase_event_id=? ORDER BY rowid`, id)
+	rows, e := db.QueryContext(ctx, `SELECT l.id,COALESCE(l.item_id,''),l.raw_name,l.quantity,l.unit,l.unit_price_cents,l.subtotal_cents,l.item_type,l.confidence,l.note,COALESCE(i.category,'other'),COALESCE(i.location,''),COALESCE(d.brand,''),COALESCE(d.model,''),COALESCE(d.serial_number,''),COALESCE(d.warranty_until,''),l.spec,l.package_size,l.package_unit FROM purchase_items l LEFT JOIN items i ON i.id=l.item_id LEFT JOIN durable_details d ON d.item_id=l.item_id WHERE l.purchase_event_id=? ORDER BY l.rowid`, id)
 	if e != nil {
 		return p, e
 	}
@@ -57,15 +65,17 @@ func (s *Store) GetPurchase(ctx context.Context, id string) (ledger.Purchase, er
 	p.Items = []ledger.PurchaseLine{}
 	for rows.Next() {
 		var l ledger.PurchaseLine
-		if e = rows.Scan(&l.ID, &l.ItemID, &l.Name, &l.Quantity, &l.Unit, &l.UnitPrice, &l.Subtotal, &l.ItemType, &l.Confidence, &l.Note); e != nil {
+		if e = rows.Scan(&l.ID, &l.ItemID, &l.Name, &l.Quantity, &l.Unit, &l.UnitPrice, &l.Subtotal, &l.ItemType, &l.Confidence, &l.Note, &l.Category, &l.Location, &l.Brand, &l.Model, &l.SerialNumber, &l.WarrantyUntil, &l.Spec, &l.PackageSize, &l.PackageUnit); e != nil {
 			return p, e
 		}
 		p.Items = append(p.Items, l)
 	}
+	ledger.DecoratePurchase(&p)
 	return p, rows.Err()
 }
 func (s *Store) Purchases(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Purchase, error) {
 	where, args := historyWhere(f, "p.purchased_at", "p.category")
+	where += " AND p.deleted_at IS NULL"
 	if f.ItemID != "" {
 		where += ` AND EXISTS(SELECT 1 FROM purchase_items l WHERE l.purchase_event_id=p.id AND l.item_id=?)`
 		args = append(args, f.ItemID)
@@ -125,7 +135,7 @@ func (s *Store) InventoryEvents(ctx context.Context, f ledger.HistoryFilter) ([]
 }
 func (s *Store) PriceHistory(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Price, error) {
 	where, args := historyWhere(f, "p.purchased_at", "")
-	where += " AND l.item_id=?"
+	where += " AND p.deleted_at IS NULL AND l.item_id=?"
 	args = append(args, f.ItemID)
 	limit, offset := page(f)
 	args = append(args, limit, offset)
@@ -315,13 +325,17 @@ func (s *Store) Aliases(ctx context.Context, id string) ([]ledger.Alias, error) 
 	}
 	return out, rows.Err()
 }
-func (s *Store) ResolveItem(ctx context.Context, name string) (inventory.Item, error) {
+func (s *Store) ResolveItem(ctx context.Context, name string, spec ...string) (inventory.Item, error) {
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return inventory.Item{}, e
 	}
 	defer tx.Rollback()
-	return resolveTxItem(ctx, tx, name)
+	target := itemTarget{Name: name}
+	if len(spec) > 0 {
+		target.Spec = spec[0]
+	}
+	return resolveTarget(ctx, tx, target)
 }
 func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, error) {
 	zone := time.FixedZone("Asia/Shanghai", 8*60*60)

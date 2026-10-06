@@ -35,7 +35,8 @@
             "manual",
             "agent",
             "import",
-            "receipt"
+            "receipt",
+            "system"
           ],
           "default": "manual"
         },
@@ -85,7 +86,8 @@
       "properties": {
         "name": {
           "type": "string",
-          "maxLength": 80
+          "maxLength": 80,
+          "description": "商品基础名称，例如无糖可乐；旧的名称加规格输入会自动拆分。"
         },
         "item_id": {
           "type": "string",
@@ -96,11 +98,13 @@
           "minimum": 0,
           "maximum": 1000000000,
           "multipleOf": 0.001,
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "购买数量，例如 1 瓶的数量为 1；不能用规格容量 2L 替代数量。"
         },
         "unit": {
           "type": "string",
-          "maxLength": 20
+          "maxLength": 20,
+          "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
         },
         "unit_price": {
           "type": "number",
@@ -123,7 +127,8 @@
             "UNTRACKED"
           ],
           "type": "string",
-          "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id."
+          "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id.",
+          "default": "CONSUMABLE"
         },
         "category": {
           "$ref": "#/$defs/Category"
@@ -159,6 +164,36 @@
         "warranty_until": {
           "type": "string",
           "format": "date"
+        },
+        "id": {
+          "type": "string",
+          "description": "改单保留原商品行 id；新增行不传 id。"
+        },
+        "spec": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+        },
+        "package_size": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "package_unit": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
+        },
+        "quantity_added": {
+          "type": "number",
+          "readOnly": true
+        },
+        "inventory_after": {
+          "type": "number",
+          "readOnly": true,
+          "description": "写入完成时的库存快照，幂等重放返回原快照。"
         }
       },
       "required": [
@@ -166,8 +201,111 @@
         "quantity",
         "unit",
         "unit_price",
-        "subtotal",
-        "item_type"
+        "subtotal"
+      ],
+      "additionalProperties": false
+    },
+    "PurchaseAmendment": {
+      "type": "object",
+      "properties": {
+        "merchant": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "purchased_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "total_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "CNY"
+          ],
+          "default": "CNY"
+        },
+        "payment_method": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "receipt",
+            "system"
+          ],
+          "default": "manual"
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "discount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "extra_fee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/PurchaseLine"
+          }
+        },
+        "expected_updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+        }
+      },
+      "required": [
+        "total_amount",
+        "items",
+        "expected_updated_at",
+        "source",
+        "external_id"
+      ],
+      "additionalProperties": false,
+      "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。"
+    },
+    "PurchaseDeletion": {
+      "type": "object",
+      "properties": {
+        "expected_updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+        }
+      },
+      "required": [
+        "expected_updated_at"
       ],
       "additionalProperties": false
     },
@@ -199,13 +337,24 @@
             "manual",
             "agent",
             "import",
-            "receipt"
+            "receipt",
+            "system"
           ],
           "default": "manual"
         },
         "note": {
           "type": "string",
           "maxLength": 2000
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "按名称操作时的商品名或别名。"
+        },
+        "spec": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
         }
       },
       "additionalProperties": false
@@ -223,7 +372,8 @@
             "manual",
             "agent",
             "import",
-            "receipt"
+            "receipt",
+            "system"
           ],
           "default": "manual"
         },
@@ -237,6 +387,16 @@
           "maximum": 1000000000,
           "multipleOf": 0.001,
           "exclusiveMinimum": 0
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "按名称操作时的商品名或别名。"
+        },
+        "spec": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
         }
       },
       "required": [
@@ -257,7 +417,8 @@
             "manual",
             "agent",
             "import",
-            "receipt"
+            "receipt",
+            "system"
           ],
           "default": "manual"
         },
@@ -276,6 +437,16 @@
           "minimum": 0,
           "maximum": 1000000000,
           "multipleOf": 0.001
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "按名称操作时的商品名或别名。"
+        },
+        "spec": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
         }
       },
       "additionalProperties": false,
@@ -315,7 +486,8 @@
             "manual",
             "agent",
             "import",
-            "receipt"
+            "receipt",
+            "system"
           ],
           "default": "manual"
         },
@@ -427,6 +599,8 @@
     "discard_item": "InventoryAction",
     "add_maintenance_event": "MaintenanceInput",
     "add_product_alias": "AliasInput",
-    "update_durable_details": "DurablePatch"
+    "update_durable_details": "DurablePatch",
+    "amend_purchase_event": "PurchaseAmendment",
+    "delete_purchase_event": "PurchaseDeletion"
   }
 }
