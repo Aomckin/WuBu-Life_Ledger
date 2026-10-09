@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "Personal money and item lifecycle database based on Stockroom. One purchase transaction updates money, items, stock and history. CNY only. Bind to loopback by default. Optional AI Intake changes inventory only; use purchases to record expenses."
   },
   "servers": [
@@ -2200,7 +2200,7 @@
         ],
         "operationId": "add_maintenance_event",
         "summary": "add maintenance event",
-        "description": "Durable items only. DONE with cost>0 creates maintenance and Expense in the same transaction.",
+        "description": "Durable items only. DONE with cost>0 creates maintenance and MoneyTransaction in the same transaction.",
         "parameters": [
           {
             "name": "id",
@@ -3578,6 +3578,2671 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NamedDiscardInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_accounts",
+        "summary": "get accounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      },
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "create_account",
+        "summary": "create account",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Initial balance is recorded as ADJUSTMENT with reason INITIAL_BALANCE, including zero. CREDIT_CARD uses net balance; debt is negative.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{id}": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_account",
+        "summary": "get account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      },
+      "patch": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "update_account",
+        "summary": "update account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountPatch"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/settings": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_money_settings",
+        "summary": "get money settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      },
+      "patch": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "set_default_payment_account",
+        "summary": "set default payment account",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoneySettings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/balance": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_balance",
+        "summary": "get balance",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Account"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BalanceSummary"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "No account_id: all real account net balances, excluding unknown; available balance excludes credit cards and inactive accounts. With account_id: one account."
+      }
+    },
+    "/api/v1/money/expenses": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "record_expense",
+        "summary": "record expense",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/income": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "record_income",
+        "summary": "record income",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomeInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/transfers": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "transfer_money",
+        "summary": "transfer money",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/refunds": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "record_refund",
+        "summary": "record refund",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/adjustments": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "adjust_balance",
+        "summary": "adjust balance",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BalanceAdjustmentInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/reconcile": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "reconcile_account",
+        "summary": "reconcile account",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BalanceAdjustmentInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/transactions": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_recent_transactions",
+        "summary": "get recent transactions",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MoneyTransaction"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Includes corrected entries with voided_at and their compensating adjustments so all balance changes remain explainable; summaries exclude corrected entries."
+      }
+    },
+    "/api/v1/money/summary": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_money_summary",
+        "summary": "get money summary",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Net expense = expenses - refunds within the requested occurrence-time range. Transfers/adjustments excluded from expense/income; income-summary selects INCOME. Item groups allocate actual payment by purchase line share."
+      }
+    },
+    "/api/v1/money/expense-summary": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_expense_summary",
+        "summary": "get expense summary",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Net expense = expenses - refunds within the requested occurrence-time range. Transfers/adjustments excluded from expense/income; income-summary selects INCOME. Item groups allocate actual payment by purchase line share."
+      }
+    },
+    "/api/v1/money/income-summary": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_income_summary",
+        "summary": "get income summary",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Net expense = expenses - refunds within the requested occurrence-time range. Transfers/adjustments excluded from expense/income; income-summary selects INCOME. Item groups allocate actual payment by purchase line share."
+      }
+    },
+    "/api/v1/money/category-summary": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_category_summary",
+        "summary": "get category summary",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Net expense = expenses - refunds within the requested occurrence-time range. Transfers/adjustments excluded from expense/income; income-summary selects INCOME. Item groups allocate actual payment by purchase line share."
+      }
+    },
+    "/api/v1/money/merchant-summary": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_merchant_summary",
+        "summary": "get merchant summary",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "REFUND",
+                "ADJUSTMENT"
+              ]
+            }
+          },
+          {
+            "name": "to_account",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "category",
+                "merchant",
+                "account",
+                "item"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Net expense = expenses - refunds within the requested occurrence-time range. Transfers/adjustments excluded from expense/income; income-summary selects INCOME. Item groups allocate actual payment by purchase line share."
+      }
+    },
+    "/api/v1/money/categories": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_money_categories",
+        "summary": "get money categories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 100
+                      }
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      },
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "save_money_category",
+        "summary": "save money category",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryInput"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/durables": {
+      "get": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "get_durable_items",
+        "summary": "get durable items",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "STORED",
+                "LOST",
+                "SOLD",
+                "RETIRED"
+              ]
+            }
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DurableRow"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      }
+    },
+    "/api/v1/items/{id}/sell": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "sell_item",
+        "summary": "sell item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "SOLD/RETIRED are terminal. STORED remains owned with quantity 1. Sell requires positive amount and posts income atomically.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DurableActionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/{id}/retire": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "retire_item",
+        "summary": "retire item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "SOLD/RETIRED are terminal. STORED remains owned with quantity 1. Sell requires positive amount and posts income atomically.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DurableActionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/{id}/move": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "move_item",
+        "summary": "move item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "SOLD/RETIRED are terminal. STORED remains owned with quantity 1. Sell requires positive amount and posts income atomically.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DurableActionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/{id}/status": {
+      "post": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "set_durable_status",
+        "summary": "set durable status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "SOLD/RETIRED are terminal. STORED remains owned with quantity 1. Sell requires positive amount and posts income atomically.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DurableActionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/{id}/durable-events": {
+      "get": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "get_durable_history",
+        "summary": "get durable history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DurableEvent"
+                      }
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      }
+    },
+    "/api/v1/items/{id}/total-cost": {
+      "get": {
+        "tags": [
+          "Lifecycle"
+        ],
+        "operationId": "get_item_total_cost",
+        "summary": "get item total cost",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "month",
+                "year"
+              ],
+              "description": "Shanghai calendar; exclusive with from/to. Week starts Monday."
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemCost"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": ""
+      }
+    },
+    "/api/v1/money/import/preview": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "preview_money_import",
+        "summary": "preview money import",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "Read only CSV parsing and dedup preview. No implicit inventory/purchase creation; ambiguous transfers/refunds require explicit account/link in generic CSV.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoneyImportInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/import": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "import_money",
+        "summary": "import money",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "description": "All rows commit atomically. source/account/external_id dedup; fallback hash account/type/time/amount/merchant. At most 500 rows per batch.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoneyImportInput"
               }
             }
           }
@@ -4964,6 +7629,11 @@
             "items": {
               "$ref": "#/components/schemas/PurchaseLine"
             }
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         },
         "required": [
@@ -5081,6 +7751,28 @@
             "items": {
               "$ref": "#/components/schemas/PurchaseWarning"
             }
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETED",
+              "PARTIAL_REFUND",
+              "REFUNDED",
+              "PREVIEW",
+              ""
+            ]
+          },
+          "refunded_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
           }
         },
         "required": [
@@ -5471,7 +8163,12 @@
               "PLANNED"
             ],
             "default": "DONE",
-            "description": "PLANNED must have cost=0; DONE cost>0 creates Expense atomically."
+            "description": "PLANNED requires cost=0; DONE cost>0 posts MoneyTransaction and account balance atomically."
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         },
         "required": [
@@ -5538,6 +8235,11 @@
               "string",
               "null"
             ]
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         },
         "required": [
@@ -5725,10 +8427,10 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "SOLD",
+              "STORED",
               "LOST",
-              "DISCARDED",
-              "ARCHIVED"
+              "SOLD",
+              "RETIRED"
             ]
           },
           "sold_at": {
@@ -5748,6 +8450,30 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "purchase_price": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "purchase_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "use_days": {
+            "type": "integer"
+          },
+          "warranty_days": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -5779,11 +8505,14 @@
             "type": "string",
             "enum": [
               "ACTIVE",
-              "SOLD",
+              "STORED",
               "LOST",
-              "DISCARDED",
-              "ARCHIVED"
-            ]
+              "SOLD",
+              "RETIRED",
+              "ARCHIVED",
+              "DISCARDED"
+            ],
+            "description": "ARCHIVED input maps to STORED; DISCARDED to RETIRED. SOLD posts income atomically; ended lifecycle cannot be restored."
           },
           "sold_at": {
             "type": "string",
@@ -5818,10 +8547,10 @@
           },
           "month_expense": {
             "type": "number",
-            "minimum": 0,
+            "minimum": -10000000000,
             "maximum": 10000000000,
             "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
+            "description": "Signed net balance or delta in CNY yuan."
           },
           "inventory": {
             "$ref": "#/components/schemas/Summary"
@@ -5843,6 +8572,39 @@
             "items": {
               "$ref": "#/components/schemas/Maintenance"
             }
+          },
+          "total_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "available_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "today_expense": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "durable_count": {
+            "type": "integer"
+          },
+          "recent_transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyTransaction"
+            }
+          },
+          "consumable_count": {
+            "type": "integer"
           }
         },
         "required": [
@@ -6064,6 +8826,11 @@
             "type": "string",
             "format": "date-time",
             "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         },
         "required": [
@@ -6192,6 +8959,19 @@
             "type": "string",
             "maxLength": 100,
             "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          },
+          "item_type": {
+            "type": "string",
+            "enum": [
+              "CONSUMABLE",
+              "DURABLE",
+              "UNTRACKED"
+            ],
+            "default": "CONSUMABLE"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 100
           }
         }
       },
@@ -6228,6 +9008,11 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         }
       },
@@ -6265,6 +9050,28 @@
               "VALID",
               "WARNING"
             ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETED",
+              "PARTIAL_REFUND",
+              "REFUNDED",
+              "PREVIEW",
+              ""
+            ]
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "refunded_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
           }
         }
       },
@@ -6499,6 +9306,1126 @@
         "required": [
           "name"
         ]
+      },
+      "AccountInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WALLET",
+              "BANK",
+              "CASH",
+              "CAMPUS_CARD",
+              "CREDIT_CARD",
+              "OTHER"
+            ],
+            "default": "OTHER"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "CNY"
+            ]
+          },
+          "initial_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "credit_limit": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WALLET",
+              "BANK",
+              "CASH",
+              "CAMPUS_CARD",
+              "CREDIT_CARD",
+              "OTHER"
+            ],
+            "default": "OTHER"
+          },
+          "currency": {
+            "const": "CNY"
+          },
+          "current_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "credit_limit": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "current_balance",
+          "active"
+        ],
+        "additionalProperties": false
+      },
+      "AccountPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "credit_limit": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "MoneySettings": {
+        "type": "object",
+        "properties": {
+          "default_payment_account": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "default_payment_account"
+        ],
+        "additionalProperties": false
+      },
+      "ReturnItem": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "multipleOf": 0.001
+          }
+        },
+        "required": [
+          "item_id",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "from_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "to_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "actual_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "purchase_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "related_transaction_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "return_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnItem"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "IncomeInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "ExpenseInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "TransferInput": {
+        "type": "object",
+        "properties": {
+          "from_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "to_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "from_account",
+          "to_account",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "RefundInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "purchase_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "related_transaction_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "return_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnItem"
+            }
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "purchase_event_id"
+            ]
+          },
+          {
+            "required": [
+              "related_transaction_id"
+            ]
+          }
+        ]
+      },
+      "BalanceAdjustmentInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "actual_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "actual_balance"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyTransaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "EXPENSE",
+              "INCOME",
+              "TRANSFER_OUT",
+              "TRANSFER_IN",
+              "REFUND",
+              "ADJUSTMENT"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "balance_delta": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "balance_before": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "balance_after": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "purchase_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "maintenance_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "related_transaction_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "voided_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "type",
+          "amount",
+          "balance_delta",
+          "balance_before",
+          "balance_after"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyResult": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyTransaction"
+            }
+          }
+        },
+        "required": [
+          "transactions"
+        ],
+        "additionalProperties": false
+      },
+      "BalanceSummary": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "const": "CNY"
+          },
+          "total_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "available_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            }
+          }
+        },
+        "required": [
+          "total_balance",
+          "available_balance",
+          "accounts"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyGroup": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "amount": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "MoneySummary": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "const": "CNY"
+          },
+          "expense": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "refund": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "net_expense": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "income": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "transfer_out": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyGroup"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "DurableActionInput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "STORED",
+              "LOST",
+              "SOLD",
+              "RETIRED"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "DurableEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "item_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PURCHASED",
+              "ACTIVATED",
+              "STORED",
+              "MOVED",
+              "LOST",
+              "FOUND",
+              "SOLD",
+              "RETIRED"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "from_status": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "to_status": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "DurableRow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "details": {
+            "$ref": "#/components/schemas/DurableDetails"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ItemCost": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "purchase_cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "maintenance_cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "total_cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "refund": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "net_cost": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "purchase_count": {
+            "type": "integer"
+          },
+          "purchase_quantity": {
+            "type": "number"
+          },
+          "latest_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "maintenance_count": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "CategoryInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "previous_name": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyImportInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "alipay",
+              "wechat"
+            ]
+          },
+          "csv": {
+            "type": "string",
+            "maxLength": 900000
+          }
+        },
+        "required": [
+          "account_id",
+          "adapter",
+          "csv"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyImportRow": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "from_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "to_account": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "actual_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "purchase_event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "related_transaction_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "return_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnItem"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "MoneyImportResult": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyImportRow"
+            }
+          },
+          "imported": {
+            "type": "integer"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyTransaction"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
       }
     }
   }

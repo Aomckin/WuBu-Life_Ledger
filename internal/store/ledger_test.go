@@ -367,7 +367,7 @@ func TestMaintenanceRollbackAndDurableRestore(t *testing.T) {
 	ctx := context.Background()
 	p := mustPurchase(t, s, "p", samplePurchase())
 	id := p.Items[2].ItemID
-	if _, err := s.db.Exec(`CREATE TRIGGER expense_failure BEFORE INSERT ON expenses WHEN NEW.maintenance_event_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'maintenance expense failure'); END`); err != nil {
+	if _, err := s.db.Exec(`CREATE TRIGGER expense_failure BEFORE INSERT ON money_transactions WHEN NEW.maintenance_event_id<>'' BEGIN SELECT RAISE(ABORT,'maintenance expense failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.AddMaintenance(ctx, "repair", id, ledger.MaintenanceInput{Title: "维修", Cost: 6500}); err == nil {
@@ -379,12 +379,12 @@ func TestMaintenanceRollbackAndDurableRestore(t *testing.T) {
 	if _, _, err := s.AddMaintenance(ctx, "repair", id, ledger.MaintenanceInput{Title: "维修", Cost: 6500}); err != nil {
 		t.Fatal(err)
 	}
-	status := "ARCHIVED"
+	status := "STORED"
 	if _, _, err := s.UpdateDurable(ctx, "archive", id, ledger.DurablePatch{Status: &status}); err != nil {
 		t.Fatal(err)
 	}
 	item, _ := s.Get(ctx, id)
-	if item.Quantity != 0 {
+	if item.Quantity != 1 {
 		t.Fatal(item)
 	}
 	status = "ACTIVE"

@@ -10,7 +10,7 @@ $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $verificationProcess = $null
 try {
-    & $GoCommand build -trimpath -ldflags '-s -w -X main.version=0.1.1' -o $binary ./cmd/stockroom
+    & $GoCommand build -trimpath -ldflags '-s -w -X main.version=0.2.0' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Integration build failed' }
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
@@ -30,6 +30,8 @@ try {
     if (-not $ready) { Get-Content (Join-Path $testDirectory 'stderr.log'); throw 'Integration service unavailable' }
     python -B tools/wubu_tool/tests/integration_purchase.py
     if ($LASTEXITCODE -ne 0) { throw 'SDK integration failed' }
+    python -B tools/wubu_tool/tests/integration_v02.py
+    if ($LASTEXITCODE -ne 0) { throw 'SDK v0.2 integration failed' }
 } finally {
     if ($verificationProcess -and -not $verificationProcess.HasExited) { Stop-Process -InputObject $verificationProcess }
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }

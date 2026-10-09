@@ -73,6 +73,11 @@
           "items": {
             "$ref": "#/$defs/PurchaseLine"
           }
+        },
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
         }
       },
       "required": [
@@ -283,6 +288,11 @@
           "type": "string",
           "format": "date-time",
           "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
+        },
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
         }
       },
       "required": [
@@ -517,7 +527,12 @@
             "PLANNED"
           ],
           "default": "DONE",
-          "description": "PLANNED must have cost=0; DONE cost>0 creates Expense atomically."
+          "description": "PLANNED requires cost=0; DONE cost>0 posts MoneyTransaction and account balance atomically."
+        },
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
         }
       },
       "required": [
@@ -562,11 +577,14 @@
           "type": "string",
           "enum": [
             "ACTIVE",
-            "SOLD",
+            "STORED",
             "LOST",
-            "DISCARDED",
-            "ARCHIVED"
-          ]
+            "SOLD",
+            "RETIRED",
+            "ARCHIVED",
+            "DISCARDED"
+          ],
+          "description": "ARCHIVED input maps to STORED; DISCARDED to RETIRED. SOLD posts income atomically; ended lifecycle cannot be restored."
         },
         "sold_at": {
           "type": "string",
@@ -588,6 +606,408 @@
         }
       },
       "additionalProperties": false
+    },
+    "ReturnItem": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "multipleOf": 0.001
+        }
+      },
+      "required": [
+        "item_id",
+        "quantity"
+      ],
+      "additionalProperties": false
+    },
+    "AccountInput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "WALLET",
+            "BANK",
+            "CASH",
+            "CAMPUS_CARD",
+            "CREDIT_CARD",
+            "OTHER"
+          ],
+          "default": "OTHER"
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "CNY"
+          ]
+        },
+        "initial_balance": {
+          "type": "number",
+          "minimum": -10000000000,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "Signed net balance or delta in CNY yuan."
+        },
+        "credit_limit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "MoneySettings": {
+      "type": "object",
+      "properties": {
+        "default_payment_account": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "default_payment_account"
+      ],
+      "additionalProperties": false
+    },
+    "IncomeInput": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "ExpenseInput": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "merchant": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "TransferInput": {
+      "type": "object",
+      "properties": {
+        "from_account": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "to_account": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "from_account",
+        "to_account",
+        "amount"
+      ],
+      "additionalProperties": false
+    },
+    "RefundInput": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "purchase_event_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "related_transaction_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "return_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReturnItem"
+          }
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "purchase_event_id"
+          ]
+        },
+        {
+          "required": [
+            "related_transaction_id"
+          ]
+        }
+      ]
+    },
+    "BalanceAdjustmentInput": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "actual_balance": {
+          "type": "number",
+          "minimum": -10000000000,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "Signed net balance or delta in CNY yuan."
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "actual_balance"
+      ],
+      "additionalProperties": false
+    },
+    "DurableActionInput": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "STORED",
+            "LOST",
+            "SOLD",
+            "RETIRED"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
     }
   },
   "inputs": {
@@ -601,6 +1021,19 @@
     "add_product_alias": "AliasInput",
     "update_durable_details": "DurablePatch",
     "amend_purchase_event": "PurchaseAmendment",
-    "delete_purchase_event": "PurchaseDeletion"
+    "delete_purchase_event": "PurchaseDeletion",
+    "create_account": "AccountInput",
+    "set_default_payment_account": "MoneySettings",
+    "record_income": "IncomeInput",
+    "record_expense": "ExpenseInput",
+    "transfer_money": "TransferInput",
+    "record_refund": "RefundInput",
+    "adjust_balance": "BalanceAdjustmentInput",
+    "reconcile_account": "BalanceAdjustmentInput",
+    "add_maintenance": "MaintenanceInput",
+    "sell_item": "DurableActionInput",
+    "retire_item": "DurableActionInput",
+    "move_item": "DurableActionInput",
+    "set_durable_status": "DurableActionInput"
   }
 }

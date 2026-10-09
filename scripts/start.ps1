@@ -20,7 +20,7 @@ if (-not $NoBuild -or -not (Test-Path -LiteralPath $binary)) {
         $env:GOMODCACHE = Join-Path $projectRoot '.tools\mod-cache'
     }
     New-Item -ItemType Directory -Force (Split-Path $binary -Parent) | Out-Null
-    & $goCommand build -trimpath -ldflags '-s -w -X main.version=0.1.1' -o $binary ./cmd/stockroom
+    & $goCommand build -trimpath -ldflags '-s -w -X main.version=0.2.0' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Wubu build failed' }
 }
 $env:LISTEN_ADDR = "127.0.0.1:$Port"

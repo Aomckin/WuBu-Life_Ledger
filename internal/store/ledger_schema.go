@@ -15,7 +15,10 @@ func (s *Store) migrateLedger(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "purchase_events", "deleted_at", `ALTER TABLE purchase_events ADD COLUMN deleted_at TEXT`); err != nil {
 		return err
 	}
-	return s.migrateProducts(ctx)
+	if err := s.migrateProducts(ctx); err != nil {
+		return err
+	}
+	return s.migrateMoney(ctx)
 }
 
 const ledgerSchema = `
@@ -40,12 +43,6 @@ CREATE TABLE IF NOT EXISTS purchase_items (
  confidence REAL CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1), note TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS purchase_item_lookup ON purchase_items(item_id,purchase_event_id);
-CREATE TABLE IF NOT EXISTS expenses (
- id TEXT PRIMARY KEY, purchase_event_id TEXT UNIQUE REFERENCES purchase_events(id), maintenance_event_id TEXT UNIQUE REFERENCES maintenance_events(id),
- amount_cents INTEGER NOT NULL CHECK(amount_cents>=0), currency TEXT NOT NULL CHECK(currency='CNY'), category TEXT NOT NULL,
- merchant TEXT NOT NULL, payment_method TEXT NOT NULL, occurred_at TEXT NOT NULL, source TEXT NOT NULL, note TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS expense_date ON expenses(occurred_at,category);
 -- item_id deliberately retains the historical identity when a legacy-only item is deleted.
 CREATE TABLE IF NOT EXISTS inventory_events (
  id TEXT PRIMARY KEY, item_id TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('PURCHASE','CONSUME','ADJUST','OPEN','FINISH','DISCARD')),
@@ -60,7 +57,7 @@ CREATE TABLE IF NOT EXISTS durable_details (
 );
 CREATE TABLE IF NOT EXISTS maintenance_events (
  id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id) ON DELETE RESTRICT,
- expense_id TEXT UNIQUE REFERENCES expenses(id), occurred_at TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL,
+ expense_id TEXT UNIQUE, occurred_at TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL,
  cost_cents INTEGER NOT NULL CHECK(cost_cents>=0), status TEXT NOT NULL, source TEXT NOT NULL, note TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS maintenance_item ON maintenance_events(item_id,occurred_at);

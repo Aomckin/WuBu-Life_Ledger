@@ -36,10 +36,16 @@ func (m *Money) UnmarshalJSON(b []byte) error {
 	return nil
 }
 func (m Money) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%d.%02d", m/100, m%100)), nil
+	sign := ""
+	if m < 0 {
+		sign = "-"
+		m = -m
+	}
+	return []byte(fmt.Sprintf("%s%d.%02d", sign, m/100, m%100)), nil
 }
 
 type PurchaseInput struct {
+	AccountID     string         `json:"account_id,omitempty"`
 	Merchant      string         `json:"merchant"`
 	PurchasedAt   string         `json:"purchased_at"`
 	TotalAmount   Money          `json:"total_amount"`
@@ -75,7 +81,9 @@ type PurchaseLine struct {
 	WarrantyUntil  string   `json:"warranty_until,omitempty"`
 }
 type Purchase struct {
-	ID string `json:"id"`
+	Status         string `json:"status"`
+	RefundedAmount Money  `json:"refunded_amount"`
+	ID             string `json:"id"`
 	PurchaseInput
 	ItemTotal        Money     `json:"item_total"`
 	CreatedAt        string    `json:"created_at"`
@@ -131,16 +139,21 @@ type InventoryResult struct {
 	Event InventoryEvent `json:"event"`
 }
 type DurableDetails struct {
-	ItemID        string `json:"item_id"`
-	Brand         string `json:"brand"`
-	Model         string `json:"model"`
-	SerialNumber  string `json:"serial_number"`
-	PurchaseDate  string `json:"purchase_date"`
-	WarrantyUntil string `json:"warranty_until"`
-	Status        string `json:"status"`
-	SoldAt        string `json:"sold_at"`
-	SoldPrice     *Money `json:"sold_price"`
-	Note          string `json:"note"`
+	PurchasePrice   Money  `json:"purchase_price"`
+	PurchaseEventID string `json:"purchase_event_id"`
+	Location        string `json:"location"`
+	UseDays         int    `json:"use_days"`
+	WarrantyDays    *int   `json:"warranty_days"`
+	ItemID          string `json:"item_id"`
+	Brand           string `json:"brand"`
+	Model           string `json:"model"`
+	SerialNumber    string `json:"serial_number"`
+	PurchaseDate    string `json:"purchase_date"`
+	WarrantyUntil   string `json:"warranty_until"`
+	Status          string `json:"status"`
+	SoldAt          string `json:"sold_at"`
+	SoldPrice       *Money `json:"sold_price"`
+	Note            string `json:"note"`
 }
 type DurablePatch struct {
 	Brand         *string `json:"brand"`
@@ -153,6 +166,7 @@ type DurablePatch struct {
 	Note          *string `json:"note"`
 }
 type MaintenanceInput struct {
+	AccountID   string `json:"account_id,omitempty"`
 	OccurredAt  string `json:"occurred_at"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -200,13 +214,19 @@ type Price struct {
 	Subtotal        Money   `json:"subtotal"`
 }
 type Dashboard struct {
-	Month             string            `json:"month"`
-	Currency          string            `json:"currency"`
-	MonthExpense      Money             `json:"month_expense"`
-	Inventory         inventory.Summary `json:"inventory"`
-	RecentPurchases   []Purchase        `json:"recent_purchases"`
-	RecentConsumption []InventoryEvent  `json:"recent_consumption"`
-	RecentMaintenance []Maintenance     `json:"recent_maintenance"`
+	ConsumableCount    int                `json:"consumable_count"`
+	TotalBalance       SignedMoney        `json:"total_balance"`
+	AvailableBalance   SignedMoney        `json:"available_balance"`
+	TodayExpense       Money              `json:"today_expense"`
+	DurableCount       int                `json:"durable_count"`
+	RecentTransactions []MoneyTransaction `json:"recent_transactions"`
+	Month              string             `json:"month"`
+	Currency           string             `json:"currency"`
+	MonthExpense       Money              `json:"month_expense"`
+	Inventory          inventory.Summary  `json:"inventory"`
+	RecentPurchases    []Purchase         `json:"recent_purchases"`
+	RecentConsumption  []InventoryEvent   `json:"recent_consumption"`
+	RecentMaintenance  []Maintenance      `json:"recent_maintenance"`
 }
 
 func NormalizeName(s string) string {

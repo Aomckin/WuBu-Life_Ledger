@@ -86,7 +86,7 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET merchant=?,purchased_at=?,total_cents=?,item_total_cents=?,discount_cents=?,extra_fee_cents=?,currency=?,payment_method=?,category=?,note=?,updated_at=? WHERE id=?`, p.Merchant, p.PurchasedAt, p.TotalAmount, out.ItemTotal, p.Discount, p.ExtraFee, p.Currency, p.PaymentMethod, p.Category, p.Note, now, id); e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(ctx, `UPDATE expenses SET amount_cents=?,currency=?,category=?,merchant=?,payment_method=?,occurred_at=?,note=? WHERE purchase_event_id=?`, p.TotalAmount, p.Currency, p.Category, p.Merchant, p.PaymentMethod, p.PurchasedAt, p.Note, id); e != nil {
+		if e = correctPurchaseMoney(ctx, tx, before, &out); e != nil {
 			return e
 		}
 		if _, e = tx.ExecContext(ctx, `DELETE FROM purchase_items WHERE purchase_event_id=?`, id); e != nil {
@@ -132,7 +132,7 @@ func (s *Store) DeletePurchase(ctx context.Context, key, id string, input ledger
 		if e = reconcilePurchaseStock(ctx, tx, before, nil, before.PurchasedAt, now); e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(ctx, `DELETE FROM expenses WHERE purchase_event_id=?`, id); e != nil {
+		if e = correctPurchaseMoney(ctx, tx, before, nil); e != nil {
 			return e
 		}
 		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET deleted_at=?,updated_at=? WHERE id=?`, now, now, id); e != nil {
@@ -214,7 +214,11 @@ func reconcilePurchaseStock(ctx context.Context, tx *sql.Tx, before ledger.Purch
 			if e = tx.QueryRowContext(ctx, `SELECT status FROM durable_details WHERE item_id=?`, id).Scan(&status); e != nil {
 				return e
 			}
-			if count != 0 || status != "ACTIVE" {
+			var lifecycle int
+			if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM durable_events WHERE item_id=? AND type<>'PURCHASED'`, id).Scan(&lifecycle); e != nil {
+				return e
+			}
+			if count != 0 || lifecycle != 0 || status != "ACTIVE" {
 				return fmt.Errorf("%w: %s 已有维护或生命周期记录，不能删除其购买。", ledger.ErrConflict, item.Name)
 			}
 		}
@@ -260,7 +264,10 @@ func reconcilePurchaseStock(ctx context.Context, tx *sql.Tx, before ledger.Purch
 				}
 			}
 		} else if item.ItemType == ledger.Durable {
-			if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET status='ARCHIVED' WHERE item_id=?`, id); e != nil {
+			if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET status='RETIRED' WHERE item_id=?`, id); e != nil {
+				return e
+			}
+			if e = addDurableEvent(ctx, tx, id, "RETIRED", "ACTIVE", "RETIRED", item.Location, now, "manual", "撤销购买"); e != nil {
 				return e
 			}
 		}

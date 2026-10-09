@@ -1,0 +1,58 @@
+/* Isolated browser acceptance against the temporary test service. */
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {chromium}=require(process.env.WUBU_PLAYWRIGHT_MODULE||'playwright');
+const base=process.env.WUBU_TEST_BASE_URL;
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(base||''))throw new Error('Temporary loopback test service required');
+const output=process.env.WUBU_UI_OUTPUT||process.cwd();
+(async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true});
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ try{
+  await page.goto(base);await page.locator('#content .ledger-panel').first().waitFor();
+  const nav=async name=>{await page.locator(`.ledger-nav [data-view="${name}"]`).click();await page.waitForFunction(()=>document.querySelector('#content').getAttribute('aria-busy')!=='true');};
+  const saveCash=async()=>{await page.locator('#cash-form [type=submit]').click();await page.locator('#cash-dialog').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('#content').getAttribute('aria-busy')!=='true');};
+  const cash=async kind=>{await page.locator(`[data-cash-action="${kind}"]`).first().click();await page.locator('#cash-dialog').waitFor();};
+  await nav('accounts');await cash('account');await page.locator('#cash-form [name=name]').fill('UI 微信');await page.locator('#cash-form [name=initial_balance]').fill('1000');await saveCash();
+  await cash('account');await page.locator('#cash-form [name=name]').fill('UI 支付宝');await page.locator('#cash-form [name=initial_balance]').fill('1000');await saveCash();
+  const accounts=await (await page.request.get(base+'/api/v1/accounts')).json();const a=accounts.items.find(a=>a.name==='UI 微信'),b=accounts.items.find(a=>a.name==='UI 支付宝');assert(a&&b);
+  await page.locator(`[data-default-account="${a.id}"]`).click();await page.getByText('默认付款',{exact:true}).waitFor();
+  await page.locator('#new-purchase').click();await page.locator('#purchase-dialog').waitFor();
+  await page.locator('#purchase-form [name=total_amount]').fill('399');await page.locator('#purchase-lines [name=name]').fill('UI 键盘');await page.locator('#purchase-lines [name=unit_price]').fill('399');await page.locator('#purchase-lines [name=item_type]').selectOption('DURABLE');
+  await page.locator('#save-purchase').click();await page.locator('#purchase-dialog').waitFor({state:'hidden'});
+  await nav('durables');await page.getByText('UI 键盘',{exact:true}).waitFor();
+  await page.locator('[data-action=maintenance]').click();await page.locator('#action-dialog').waitFor();await page.locator('#action-form [name=title]').fill('换轴');await page.locator('#action-form [name=cost]').fill('50');await page.locator('#action-form [type=submit]').click();await page.locator('#action-dialog').waitFor({state:'hidden'});
+  await page.locator('[data-cash-action=status]').click();await page.locator('#cash-dialog').waitFor();await page.locator('#cash-form [name=status]').selectOption('STORED');await saveCash();assert.match(await page.locator('#content').innerText(),/收纳/);
+  await page.locator('[data-cash-action=move]').click();await page.locator('#cash-dialog').waitFor();await page.locator('#cash-form [name=location]').fill('家里');await saveCash();
+  await page.locator('[data-detail]').first().click();await page.locator('#detail-dialog').waitFor();assert.match(await page.locator('#detail-content').innerText(),/449/);await page.locator('[data-close=detail-dialog]').click();
+  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(output,'durables.png'),fullPage:true});
+  await page.locator('[data-cash-action=sell]').click();await page.locator('#cash-dialog').waitFor();await page.locator('#cash-form [name=account_id]').selectOption(b.id);await page.locator('#cash-form [name=amount]').fill('260');await saveCash();assert.match(await page.locator('#content').innerText(),/已售/);
+  await nav('accounts');await cash('transfer');await page.locator('#cash-form [name=from_account]').selectOption(a.id);await page.locator('#cash-form [name=to_account]').selectOption(b.id);await page.locator('#cash-form [name=amount]').fill('100');await saveCash();
+  await nav('transactions');assert.match(await page.locator('#content').innerText(),/转出/);assert.match(await page.locator('#content').innerText(),/收入/);
+  await nav('import');await page.locator('#cash-import-form [name=account_id]').selectOption(a.id);await page.locator('#cash-import-form [name=csv]').fill('occurred_at,type,amount,merchant,external_id\n2026-10-09T10:00:00+08:00,EXPENSE,5.50,UI 便利店,ui-csv');await page.locator('#cash-import-form [type=submit]').click();await page.locator('#cash-import-commit').waitFor({state:'visible'});assert.match(await page.locator('#cash-import-preview').innerText(),/UI 便利店/);await page.locator('#cash-import-commit').click();await page.getByText('导入 1 条，跳过重复 0 条。',{exact:true}).waitFor();
+  await page.locator('#new-purchase').click();await page.locator('#purchase-dialog').waitFor();
+  await page.locator('#purchase-form [name=total_amount]').fill('10');await page.locator('#purchase-lines [name=name]').fill('UI 退款商品');await page.locator('#purchase-lines [name=unit_price]').fill('10');
+  await page.locator('#save-purchase').click();await page.locator('#purchase-dialog').waitFor({state:'hidden'});
+  await nav('home');
+  const recentPurchases=page.locator('#content .ledger-panel').filter({has:page.getByRole('heading',{name:'最近购买',exact:true})});
+  const recentMoney=page.locator('#content .ledger-panel').filter({has:page.getByRole('heading',{name:'最近资金流水',exact:true})});
+  assert.equal(await recentMoney.locator('[data-cash-action=refund]').count(),0);
+  await recentPurchases.locator('tr').filter({hasText:'UI 退款商品'}).locator('.ledger-actions [data-cash-action=refund]').waitFor();
+  await nav('purchases');
+  const refundRow=page.locator('#content tr').filter({hasText:'UI 退款商品'});
+  await refundRow.locator('.ledger-actions [data-cash-action=refund]').click();await page.locator('#cash-dialog').waitFor();
+  assert.equal(await page.locator('#cash-form [name=amount]').inputValue(),'10');
+  assert.equal(await page.locator('#cash-form [name=account_id]').inputValue(),a.id);
+  await page.locator('#cash-form [name=amount]').fill('3');await saveCash();
+  await refundRow.locator('[data-cash-action=refund]').click();await page.locator('#cash-dialog').waitFor();
+  assert.equal(await page.locator('#cash-form [name=amount]').inputValue(),'7');await saveCash();
+  assert.equal(await refundRow.locator('[data-cash-action=refund]').count(),0);
+  await nav('transactions');assert.equal(await page.locator('#content [data-cash-action=refund]').count(),0);assert.match(await page.locator('#content').innerText(),/退款/);
+  await nav('home');await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(output,'overview.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Mobile page should not overflow viewport');
+  assert.deepEqual(errors,[],'No uncaught browser errors');console.log(JSON.stringify({ui:'PASS',accounts:2,durable_cost:449,sale:260,csv_preview_and_commit:true,purchase_partial_and_full_refund:true,mobile_no_overflow:true}));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

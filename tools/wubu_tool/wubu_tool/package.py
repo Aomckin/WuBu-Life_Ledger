@@ -8,8 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zhaoxi.sdk import CapabilityDeclaration, PermissionLevel, SideEffect, Tool, ToolResult
 from .client import ROUTES, WubuClient, WubuError
 from .event_tools import RecordPurchaseTool, ValidatePurchaseTool, InventoryEventTool
+from .reality_tools import create_reality_tools
 
 Operation = Literal[
+    "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
     "amend_purchase_event", "delete_purchase_event",
     "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item",
     "add_maintenance_event", "add_product_alias", "update_durable_details", "search_items", "resolve_item",
@@ -77,7 +79,7 @@ class WubuTool(Tool):
         return self.permission_for(arguments) == PermissionLevel.READ or bool(arguments.get("idempotency_key"))
     async def execute(self, arguments):
         values = arguments.model_dump(exclude={"operation"}, exclude_none=True)
-        if arguments.operation in {"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event"}:
+        if arguments.operation in {"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status"}:
             values["payload"] = {**values.get("payload", {}), "source": "agent"}
         try:
             result = await asyncio.to_thread(self.client.call, arguments.operation, **values)
@@ -87,17 +89,17 @@ class WubuTool(Tool):
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "0.1.1"
+    package_version = "0.2.0"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)
     def configure(self, config): self.client = WubuClient(str(config.get("base_url", "http://127.0.0.1:8026")), float(config.get("timeout_seconds", 15)))
     def create_tools(self, config):
         if self.client is None: self.configure(config)
-        return [WubuTool(self.client), RecordPurchaseTool(self.client), ValidatePurchaseTool(self.client), InventoryEventTool(self.client)]
+        return [WubuTool(self.client), RecordPurchaseTool(self.client), ValidatePurchaseTool(self.client), InventoryEventTool(self.client), *create_reality_tools(self.client)]
     def workflow_paths(self): return []
     def reflection_sources(self): return []
     def routing_hints(self): return [{"markers": ["物簿", "life ledger", "还剩几", "记录购买", "上次多少钱", "记录维修"], "route": "tool"}]
-    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "record_purchase", "tools": ["record_purchase", "validate_purchase", "wubu_inventory_event", "wubu"], "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
+    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "record_purchase", "tools": ["wubu", "record_purchase", "validate_purchase", "wubu_inventory_event"] + [tool.name for tool in create_reality_tools(self.client)], "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
 
 def create_package(): return WubuToolPackage()

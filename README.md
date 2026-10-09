@@ -1,74 +1,56 @@
-# 物簿 Life Ledger v0.1
+# 物簿 Life Ledger v0.2
 
-一次现实事件，同时更新钱、物、库存与历史。基于 [Timo348/Stockroom](https://github.com/Timo348/Stockroom) 的 Go + SQLite 定向扩展，保留母体库存、Intake、媒体、Docker 和原测试。
-
-**朝汐 ZhaoXi 项目严格只读。** 兼容工具包在本仓库 `tools/wubu_tool`，已验证 SDK / HTTP 契约，但未安装或激活到朝汐实例。见 [接入说明](docs/ZHAOXI_INTEGRATION.md)。
+东西有生命周期，钱有流向。基于 [Timo348/Stockroom](https://github.com/Timo348/Stockroom) 的 Go + SQLite 定向扩展，保留母体结构、库存、Intake、媒体、Docker 与 Apache-2.0 许可证。
 
 ## 启动
 
-Windows 双击 `启动物簿.cmd`，或在本目录运行：
+Windows 双击 `启动物簿.cmd`，或运行：
 
 ```powershell
 .\scripts\start.ps1
 ```
 
-打开 http://127.0.0.1:8026 。Ctrl+C 停止，数据保存在 `data/wubu.db`，停止/重启不丢失。默认只监听本机，不需要配置 AI。Go 工具链可来自系统（Go >=1.25），或本机已准备且不入 Git 的 `.tools/go`；首次构建需下载 go.mod 锁定依赖。已构建时可 `.\scripts\start.ps1 -NoBuild`。端口可通过 `-Port 8027` 调整。
+打开 http://127.0.0.1:8026 。Ctrl+C 停止，正式数据在 `data/wubu.db`。默认只监听本机，不需要 AI 配置。Go >=1.25；可使用本机不入 Git 的 `.tools/go`。Linux/macOS 可运行 `go run ./cmd/stockroom`；Docker 配置保留，本次没有容器验收。
 
-Linux / macOS：
-
-```sh
-go run ./cmd/stockroom
-```
-
-Docker（本次环境无 Docker，未运行容器验收）：
-
-```sh
-docker compose up -d --build
-```
-
-容器内监听 8080，宿主机默认 8026；SQLite 数据卷持续保存。旧 Stockroom 数据库可通过 `DATABASE_PATH` 指向原文件，应用会升级至 schema 7，保留原 Item 并生成库存基线历史。迁移前先备份原数据库；本仓库的正式库与验收库分开。
+已有 v0.1/v0.1.1 数据库会自动升到 schema 10，保留购买、库存、维护、别名和幂等记录。升级前请备份旧数据库；不要用正式库运行示例和测试。迁移细节见 [v0.2 交付记录](docs/V0.2_DELIVERY.md)。
 
 ## 已实现
 
-- 混合购买：CONSUMABLE 增库存，DURABLE 创建独立实例，UNTRACKED 只记费用；购买、费用、商品、库存历史在同一事务。
-- 用、调、开、完、弃：复用库存 Store / 原 adjust 路径，当前状态和事件历史原子写入；旧 CRUD、Intake 和七天自动耗尽也留下历史。
-- 耐用品品牌、型号、序列号、保修、状态与售出信息；维护费用和 Expense 同一事务。
-- 永久持久化 Idempotency-Key：重放原响应、不同输入返回 409；失败可用原键重试；source + external_id 去重。
-- 名称 / 别名 / 标准化精确匹配；重复名称拒绝猜测；价格查询直接来自 PurchaseItem。
-- 购买、费用、维护与库存历史查询，分页/日期筛选，上海时区月支出汇总。
-- 首页、库存、物品、购买、消费、维护、历史，购买表单与事件纠错，保留原库存编辑 UI。
-- 全部新增 REST 进入 OpenAPI 3.1；物簿侧朝汐 SDK 工具包与导入 Draft 边界。
+- 账户：钱包、银行卡、现金、校园卡、信用卡、其他；初始余额生成事件，可设置默认付款账户、查询余额和核对真实余额。
+- 资金流水：支出、收入、双向关联转账、关联退款、余额调整。余额与事件同事务提交；转账不计消费或收入，退款冲减净支出。
+- 购买：消耗品入库、耐用品独立实例、不跟库存的服务；购买、明细、库存历史、统一资金流水和账户扣款共用一个事务。改单和撤销保留资金补偿历史。
+- 耐用品：独立仓库、品牌型号、序列号、购买信息、位置、保修和使用时长；在用、收纳、丢失、已售、退休，完整生命周期事件。出售同时入收入，退休保留历史。
+- 维护：维护记录与费用扣款关联；可查询购入、累计维护、退款、总持有成本及净成本。
+- 查询：上海时区今日、本周、本月、本年或自定义范围；分类、商家、商品和账户统计；商品购买次数、数量、最近价格和维护次数。
+- 导入：支付宝、微信、Generic CSV 的只读预览和事务提交；订单号去重，无订单号使用稳定指纹。支付流水不自动生成商品库存。
+- 页面：首页钱物概览、账户、资金流水、耐用品、导入，保留原库存、购买、消费、维护与历史页面。
+- Agent：现实动作高层工具，全部关键写入支持持久化 Idempotency-Key；同键同参数重放，变更参数返回 409，失败不占键。
 
-金额 API 使用 **CNY 元**（最多两位小数），SQLite 存整数分。原 Item.unit_price_cents 仍为分。只支持 CNY；实际付款允许不同于商品合计；耐用品每件一行、数量 1；不实现收入账本、汇率转换、真实支付宝/微信 CSV 适配或额外 LLM 系统。
+金额 API 使用 CNY 元，最多两位小数，SQLite 存整数分。支出等 `amount` 为正的绝对值，`balance_delta` 表达方向。信用卡采用**净余额**，债务为负，转入还款增加余额，信用额度不计总资金。未指定账户保留无法确认账户的旧账，不猜支付钱包，也不计真实总余额。
 
-## API 快速验收
+## API 与朝汐
 
-```powershell
-$body = Get-Content .\docs\examples\purchase.json -Raw -Encoding utf8
-Invoke-RestMethod http://127.0.0.1:8026/api/v1/purchases `
-  -Method Post -ContentType 'application/json; charset=utf-8' `
-  -Headers @{ 'Idempotency-Key' = 'example-purchase-001' } `
-  -Body ([Text.Encoding]::UTF8.GetBytes($body))
-```
-
-同一键与同一输入重复请求只成功一次。修改过输入后不要复用此键。此命令会真实写入当前账簿，示例数据建议对独立测试库执行。
-
-- API 索引：`GET /api/v1`
-- 健康检查：`GET /healthz`
 - 契约：`GET /api/v1/openapi.json`
-- 事件入口：`POST /api/v1/purchases`，`POST /api/v1/items/{id}/consume|adjust|open|finish|discard|maintenance`
-- 汇总：`GET /api/v1/ledger/summary?month=2026-10`
+- 账户：`GET / POST /api/v1/accounts`，`PATCH /api/v1/money/settings`
+- 资金：`POST /api/v1/money/income|expenses|transfers|refunds|adjustments|reconcile`
+- 查询：`GET /api/v1/money/balance|transactions|summary`，支持 `period=today|week|month|year` 或 `from/to`。
+- 购买：`POST /api/v1/purchases` 或简化的 `/purchases/record`，新增 `account_id`；省略用默认账户。
+- 耐用品：`GET /api/v1/durables`，`POST /api/v1/items/{id}/sell|retire|move|status`
+- 成本：`GET /api/v1/items/{id}/total-cost`
+- 导入：`POST /api/v1/money/import/preview`，确认后 `/money/import`
 
-时间输入为带时区 RFC3339，存 UTC；`from` 含边界、`to` 不含边界；月汇总按 Asia/Shanghai。购买或生命周期已引用的 Item 不能硬删除，使用 finish、discard 或 durable 状态保留历史。原 Intake 仅调整库存，不替代 purchases。
+退款需关联原购买或支出，金额不得超过剩余未退金额；只有实际退回商品时才传 `return_items`。已退款的购买不再改单或撤销。收纳仍拥有数量 1，售出和退休终止生命周期，不能直接删除物品。
 
-## 验证与文档
+**朝汐 ZhaoXi 项目严格只读。** 适配与测试在本仓库 `tools/wubu_tool`，使用 `python -B` 从现有朝汐 src 导入 SDK，没有安装、激活或修改朝汐环境。见 [接入说明](docs/ZHAOXI_INTEGRATION.md)。
+
+## 验证
 
 ```powershell
 .\scripts\test.ps1
-# 可选：只读验证真实朝汐 SDK（-B 禁止缓存写回）
+# 可选：只读验证真实朝汐 SDK 与临时 HTTP 服务
 .\scripts\test.ps1 -ZhaoxiSource 'E:\桌面\改变世界的魔法\朝汐ZhaoXi\src'
 ```
 
-测试覆盖任务书 A–F、混合购买、回滚、并发幂等、负库存、价格/别名、开封/耗尽、维护、旧数据库迁移、旧库存入口和 HTTP / OpenAPI。详见 [验收记录](docs/WUBU_V0.1_ACCEPTANCE.md)、[母体审计](docs/WUBU_STOCKROOM_AUDIT.md)、[开发任务书](docs/物簿%20v0.1%20开发任务书｜Stockroom%20母体版.md)。
+测试使用临时 SQLite，覆盖旧版本迁移与重启、任务书 A–F、并发幂等、转账守恒、退款与退库存、余额重建、跨领域失败回滚、持有成本、导入去重、HTTP/OpenAPI 和真实 SDK。浏览器验收脚本 `scripts/test-v02-ui.ps1` 对独立临时服务验证桌面与手机页面，需要已有 Edge 和 Playwright；可用 `-PlaywrightModule` 指定模块路径。
 
-本项目保留 Apache-2.0 [LICENSE](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md) 和 [母体原 README](docs/STOCKROOM_UPSTREAM_README.md)。不删母体 AI / 媒体实现，后续 review 流程可继续复用。
+[开发审计](docs/WUBU_V02_AUDIT.md) · [v0.2 交付记录](docs/V0.2_DELIVERY.md) · [第三方声明](THIRD_PARTY_NOTICES.md) · [母体 README](docs/STOCKROOM_UPSTREAM_README.md) · [LICENSE](LICENSE)

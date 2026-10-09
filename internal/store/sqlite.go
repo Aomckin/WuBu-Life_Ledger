@@ -271,20 +271,32 @@ func (s *Store) Get(ctx context.Context, id string) (inventory.Item, error) {
 }
 
 func (s *Store) Update(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE items SET
+	var out inventory.Item
+	_, err := s.ledgerTx(ctx, "", "legacy-update:"+id, input, &out, func(tx *sql.Tx) error {
+		current, e := getTxItem(ctx, tx, id)
+		if e != nil {
+			return e
+		}
+		if current.ItemType == ledger.Durable && (input.Quantity != current.Quantity || input.Location != current.Location || input.ShortLived || input.AutoConsumeAt != nil) {
+			return fmt.Errorf("%w: use durable lifecycle/move actions", ledger.ErrConflict)
+		}
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		result, err := tx.ExecContext(ctx, `UPDATE items SET
 name = ?, category = ?, icon = ?, quantity = ?, unit = ?, location = ?,
 low_stock_threshold = ?, expiry_date = ?, unit_price_cents = ?,
 short_lived = ?, auto_consume_at = ?, notes = ?, updated_at = ?, version = version + 1,spec=?,package_size=?,package_unit=?
 WHERE id = ?`, input.Name, input.Category, input.Icon, input.Quantity, input.Unit, input.Location,
-		input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, input.Spec, input.PackageSize, input.PackageUnit, id)
-	if err != nil {
-		return inventory.Item{}, fmt.Errorf("update item: %w", err)
-	}
-	if err := requireAffected(result); err != nil {
-		return inventory.Item{}, err
-	}
-	return s.Get(ctx, id)
+			input.LowStockThreshold, input.ExpiryDate, input.UnitPriceCents, input.ShortLived, input.AutoConsumeAt, input.Notes, now, input.Spec, input.PackageSize, input.PackageUnit, id)
+		if err != nil {
+			return fmt.Errorf("update item: %w", err)
+		}
+		if err := requireAffected(result); err != nil {
+			return err
+		}
+		out, e = getTxItem(ctx, tx, id)
+		return e
+	})
+	return out, err
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {
@@ -467,7 +479,7 @@ func (s *Store) ApplyDueAutoConsumption(ctx context.Context) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(ctx, `UPDATE items SET
 quantity = 0, auto_consume_at = NULL, updated_at = ?, version = version + 1
-WHERE short_lived = 1 AND auto_consume_at IS NOT NULL
+WHERE item_type='CONSUMABLE' AND short_lived = 1 AND auto_consume_at IS NOT NULL
 AND julianday(auto_consume_at) <= julianday(?)`, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("apply due auto-consumption: %w", err)

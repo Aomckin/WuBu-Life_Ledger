@@ -170,7 +170,7 @@ func TestPurchaseLineReplacementAndLateFailureRollback(t *testing.T) {
 		t.Fatal(updated)
 	}
 	durable, _ := s.DurableDetails(ctx, p.Items[2].ItemID)
-	if durable.Status != "ARCHIVED" {
+	if durable.Status != "RETIRED" {
 		t.Fatal(durable)
 	}
 	fail := amendment(updated)

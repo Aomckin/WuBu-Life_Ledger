@@ -96,7 +96,7 @@ func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.Pur
 		if e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO expenses VALUES(?,?,NULL,?,?,?,?,?,?,?,?)`, uuid.NewString(), out.ID, p.TotalAmount, p.Currency, p.Category, p.Merchant, p.PaymentMethod, p.PurchasedAt, p.Source, p.Note); e != nil {
+		if _, e = purchasePayment(ctx, tx, &out); e != nil {
 			return e
 		}
 		for i := range out.Items {
@@ -126,6 +126,9 @@ func (s *Store) InventoryAction(ctx context.Context, key, id, action string, inp
 		item, e := resolveTarget(ctx, tx, itemTarget{ID: id, Name: input.Name, Spec: input.Spec})
 		if e != nil {
 			return e
+		}
+		if item.ItemType == ledger.Durable {
+			return fmt.Errorf("%w: use durable lifecycle actions for durable items", ledger.ErrConflict)
 		}
 		out, e = mutateInventory(ctx, tx, item.ID, action, input, nil)
 		return e
@@ -257,12 +260,21 @@ func (s *Store) AddMaintenance(ctx context.Context, key, id string, input ledger
 		if _, e = tx.ExecContext(ctx, `INSERT INTO maintenance_events VALUES(?,?,NULL,?,?,?,?,?,?,?)`, out.ID, id, p.OccurredAt, p.Title, p.Description, p.Cost, p.Status, p.Source, p.Note); e != nil {
 			return e
 		}
+		var durableStatus string
+		if e = tx.QueryRowContext(ctx, `SELECT status FROM durable_details WHERE item_id=?`, id).Scan(&durableStatus); e != nil {
+			return e
+		}
+		if durableStatus == "SOLD" || durableStatus == "RETIRED" {
+			return ledger.ErrConflict
+		}
 		if p.Cost > 0 {
-			expenseID := uuid.NewString()
-			out.ExpenseID = &expenseID
-			if _, e = tx.ExecContext(ctx, `INSERT INTO expenses VALUES(?,NULL,?,?,'CNY','maintenance','','',?,?,?)`, expenseID, out.ID, p.Cost, p.OccurredAt, p.Source, p.Note); e != nil {
-				return e
+			expenseID := ""
+			t, err := postMoney(ctx, tx, "EXPENSE", ledger.MoneyInput{AccountID: p.AccountID, Amount: p.Cost, Category: "maintenance", OccurredAt: p.OccurredAt, Source: p.Source, Note: p.Note}, out.ID, -ledger.SignedMoney(p.Cost))
+			if err != nil {
+				return err
 			}
+			expenseID = t.ID
+			out.ExpenseID = &expenseID
 			if _, e = tx.ExecContext(ctx, `UPDATE maintenance_events SET expense_id=? WHERE id=?`, expenseID, out.ID); e != nil {
 				return e
 			}
@@ -340,6 +352,11 @@ func insertPurchaseLine(ctx context.Context, tx *sql.Tx, purchase *ledger.Purcha
 				return fmt.Errorf("%w: durable instance already has a purchase", ledger.ErrConflict)
 			}
 			if _, e = tx.ExecContext(ctx, `INSERT INTO durable_details(item_id,brand,model,serial_number,purchase_date,warranty_until,note) VALUES(?,?,?,?,?,?,?)`, item.ID, l.Brand, l.Model, l.SerialNumber, purchase.PurchasedAt, l.WarrantyUntil, l.Note); e != nil {
+				return e
+			}
+		}
+		if l.ItemType == ledger.Durable {
+			if e = addDurableEvent(ctx, tx, item.ID, "PURCHASED", "", "ACTIVE", item.Location, purchase.PurchasedAt, purchase.Source, l.Note); e != nil {
 				return e
 			}
 		}

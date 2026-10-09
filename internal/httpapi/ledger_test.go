@@ -114,7 +114,7 @@ func TestOpenAPILedgerContract(t *testing.T) {
 			ids[id] = true
 		}
 	}
-	for _, id := range []string{"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "add_maintenance_event", "search_items", "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history", "get_recent_purchases"} {
+	for _, id := range []string{"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "add_maintenance_event", "search_items", "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history", "get_recent_purchases", "create_account", "transfer_money", "record_income", "record_refund", "adjust_balance", "sell_item", "retire_item", "move_item", "get_durable_items", "get_item_total_cost"} {
 		if !ids[id] {
 			t.Error("missing operation", id)
 		}

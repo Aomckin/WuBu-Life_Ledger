@@ -29,6 +29,8 @@ class EventInput(BaseModel):
 
 
 class PurchaseItem(EventInput):
+    item_type: Literal["CONSUMABLE","DURABLE","UNTRACKED"] = "CONSUMABLE"
+    location: str = Field(default="",max_length=100)
     name: str = Field(min_length=1, max_length=80, description="商品名，例如无糖可乐。")
     quantity: float = Field(gt=0, le=1_000_000_000, description="购买数量，例如 1；规格 2L 不等于数量 2。")
     unit: str = Field(min_length=1, max_length=20, description="库存计数单位，例如瓶、罐、个、升。")
@@ -37,6 +39,7 @@ class PurchaseItem(EventInput):
 
 
 class PurchaseInput(EventInput):
+    account_id: str = Field(default="",description="账户 ID 或精确名称；省略用默认账户。")
     items: list[PurchaseItem] = Field(min_length=1, max_length=500)
     total: float | None = Field(default=None, ge=0, le=10_000_000_000, description="整笔实际付款，元；省略时由明细合计。单商品仅填总价时可推导单价。")
     merchant: str = Field(default="", max_length=200)

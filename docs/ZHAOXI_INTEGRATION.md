@@ -85,3 +85,11 @@ REST 对应 `/api/v1/purchases/record`、`/purchases/validate`、`/items/consume
 - 统一匹配顺序：名称与规格 → 别名 → 归一化精确匹配 → 唯一高置信候选。多个合理候选返回 409；支持空白、全角、大小写及 2L ↔ 2000ml 规格等价，库存数量不跨单位换算。
 - 新耐用品每行数量必须 1，默认创建独立实例；quantity>1 请拆行。生命周期字段在 durable 接口；售出价格仅为元数据，v0.1 没有收入账本。
 - 原 Intake 只应用库存建议，不能记录完整购买费用；购买必须用 purchases。
+
+## v0.2 工具扩展
+
+物簿侧工具包已升至 0.2.0。新增 record_income、record_expense、transfer_money、record_refund、adjust_balance、reconcile_account、add_maintenance、sell_item、retire_item、move_item、set_durable_status，以及账户/余额/资金汇总/最近流水/耐用品/成本查询。仍不修改或安装到朝汐。
+
+record_purchase 保留短参数，新增 account_id 和商品行 item_type/location，支持直接购买独立耐用品。create_account 可用初始真实余额建账户；set_default_payment_account 后常见购买和维护不必重复传账户。
+
+scripts/test.ps1 的真实 SDK 验收新增 integration_v02.py，在独立临时库完成购买 → 维护 → 收纳/移动 → 售出，以及转账重试、退款、收入、余额核对和服务端汇总。所有 schema 均可生成，账户余额可从 MoneyTransaction 重算。完整说明见 [v0.2 交付](V0.2_DELIVERY.md)。

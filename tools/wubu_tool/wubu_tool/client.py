@@ -33,6 +33,20 @@ ROUTES = {
     "get_durable_details": ("GET", "/items/{item_id}/durable"),
     "get_product_aliases": ("GET", "/items/{item_id}/aliases"),
 }
+ROUTES.update({
+ "create_account":("POST","/accounts"), "set_default_payment_account":("PATCH","/money/settings"),
+ "record_income":("POST","/money/income"),"record_expense":("POST","/money/expenses"),
+ "transfer_money":("POST","/money/transfers"),"record_refund":("POST","/money/refunds"),
+ "adjust_balance":("POST","/money/adjustments"),"reconcile_account":("POST","/money/reconcile"),
+ "get_accounts":("GET","/accounts"),"get_balance":("GET","/money/balance"),
+ "get_account_balance":("GET","/money/balance"),"get_total_balance":("GET","/money/balance"),
+ "get_expense_summary":("GET","/money/expense-summary"),"get_income_summary":("GET","/money/income-summary"),
+ "get_category_summary":("GET","/money/category-summary"),"get_merchant_summary":("GET","/money/merchant-summary"),
+ "get_recent_transactions":("GET","/money/transactions"),"add_maintenance":("POST","/items/{item_id}/maintenance"),
+ "sell_item":("POST","/items/{item_id}/sell"),"retire_item":("POST","/items/{item_id}/retire"),
+ "move_item":("POST","/items/{item_id}/move"),"set_durable_status":("POST","/items/{item_id}/status"),
+ "get_durable_items":("GET","/durables"),"get_item_total_cost":("GET","/items/{item_id}/total-cost"),
+})
 ROUTES.update({action+"_by_name": ("POST", "/items/"+action) for action in ("consume", "adjust", "open", "finish", "discard")})
 
 class WubuError(Exception):
@@ -46,7 +60,7 @@ class WubuClient:
     def __init__(self, base_url="http://127.0.0.1:8026", timeout=15):
         parsed = urlsplit(base_url)
         if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"} or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
-            raise ValueError("物簿 v0.1 使用本机 HTTP 服务根地址")
+            raise ValueError("物簿使用本机 HTTP 服务根地址")
         if not 0 < float(timeout) <= 120:
             raise ValueError("timeout must be between 0 and 120 seconds")
         self.base_url = base_url.rstrip("/") + "/api/v1"

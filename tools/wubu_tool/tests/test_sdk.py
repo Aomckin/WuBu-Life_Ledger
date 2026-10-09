@@ -18,7 +18,7 @@ class SDKTests(unittest.TestCase):
         self.assertFalse(tool.safe_to_replay({"operation":"consume_item"}))
         self.assertTrue(tool.safe_to_replay({"operation":"consume_item","idempotency_key":"1"}))
         schema=tool.schema()["function"]["parameters"]
-        self.assertEqual(len(schema["allOf"]), 11)
+        self.assertEqual(len(schema["allOf"]), len(__import__("json").loads(__import__("pathlib").Path(__import__("wubu_tool.package",fromlist=["x"]).__file__).with_name("api_schema.json").read_text(encoding="utf-8"))["inputs"]))
         self.assertIn("PurchaseInput", schema["$defs"])
 
     def test_missing_key_is_rejected_before_network(self):
@@ -33,7 +33,7 @@ class SDKTests(unittest.TestCase):
 
     def test_purchase_schema_is_short_and_not_rest_dto(self):
         tools = create_package().create_tools({})
-        self.assertEqual({tool.name for tool in tools}, {"wubu", "record_purchase", "validate_purchase", "wubu_inventory_event"})
+        self.assertTrue({"wubu", "record_purchase", "validate_purchase", "wubu_inventory_event", "record_income", "transfer_money", "record_refund", "adjust_balance", "add_maintenance", "sell_item", "retire_item", "move_item", "get_accounts", "get_balance", "get_expense_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost"}.issubset({tool.name for tool in tools}))
         schema = tools[1].schema()["function"]["parameters"]
         self.assertEqual(set(schema["required"]), {"items", "idempotency_key"})
         self.assertNotIn("payload", schema["properties"])

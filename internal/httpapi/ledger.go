@@ -13,6 +13,7 @@ import (
 )
 
 func (a *API) registerLedger(m *http.ServeMux) {
+	a.registerMoney(m)
 	m.HandleFunc("POST /api/v1/purchases", a.recordPurchase)
 	m.HandleFunc("POST /api/v1/purchases/record", a.agentPurchase(false))
 	m.HandleFunc("POST /api/v1/purchases/validate", a.agentPurchase(true))
@@ -97,7 +98,7 @@ func (a *API) agentPurchase(validate bool) http.HandlerFunc {
 		if validate {
 			status = 200
 		}
-		writeJSON(w, status, map[string]any{"purchase_id": out.ID, "expense_amount": out.TotalAmount, "items": out.Items, "warnings": out.Warnings, "validation_status": out.ValidationStatus})
+		writeJSON(w, status, map[string]any{"account_id": out.AccountID, "status": out.Status, "purchase_id": out.ID, "expense_amount": out.TotalAmount, "items": out.Items, "warnings": out.Warnings, "validation_status": out.ValidationStatus})
 	}
 }
 func (a *API) recordPurchase(w http.ResponseWriter, r *http.Request) {

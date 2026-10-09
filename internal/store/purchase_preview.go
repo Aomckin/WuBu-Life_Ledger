@@ -23,6 +23,15 @@ func (s *Store) ValidatePurchase(ctx context.Context, input ledger.PurchaseInput
 	}
 	defer tx.Rollback()
 	out.PurchaseInput = p
+	account, e := paymentAccountTx(ctx, tx, p.AccountID, p.PaymentMethod)
+	if e != nil {
+		return out, e
+	}
+	if account.CurrentBalance-ledger.SignedMoney(p.TotalAmount) < -1e12 {
+		return out, fmt.Errorf("%w: balance out of range", ledger.ErrInvalid)
+	}
+	out.AccountID = account.ID
+	out.Status = "PREVIEW"
 	if p.ExternalID != "" {
 		var count int
 		if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM purchase_events WHERE source=? AND external_id=?`, p.Source, p.ExternalID).Scan(&count); e != nil {

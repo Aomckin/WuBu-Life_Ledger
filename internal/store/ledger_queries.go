@@ -57,6 +57,21 @@ func getPurchase(ctx context.Context, db purchaseReader, id string) (ledger.Purc
 	if e != nil {
 		return p, e
 	}
+	var refunded ledger.Money
+	if e = db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_cents),0) FROM money_transactions WHERE purchase_event_id=? AND type='REFUND' AND voided_at=''`, id).Scan(&refunded); e != nil {
+		return p, e
+	}
+	p.RefundedAmount = refunded
+	p.Status = "COMPLETED"
+	if refunded > 0 {
+		p.Status = "PARTIAL_REFUND"
+		if refunded == p.TotalAmount {
+			p.Status = "REFUNDED"
+		}
+	}
+	if e = db.QueryRowContext(ctx, `SELECT account_id FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at=''`, id).Scan(&p.AccountID); e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return p, e
+	}
 	rows, e := db.QueryContext(ctx, `SELECT l.id,COALESCE(l.item_id,''),l.raw_name,l.quantity,l.unit,l.unit_price_cents,l.subtotal_cents,l.item_type,l.confidence,l.note,COALESCE(i.category,'other'),COALESCE(i.location,''),COALESCE(d.brand,''),COALESCE(d.model,''),COALESCE(d.serial_number,''),COALESCE(d.warranty_until,''),l.spec,l.package_size,l.package_unit FROM purchase_items l LEFT JOIN items i ON i.id=l.item_id LEFT JOIN durable_details d ON d.item_id=l.item_id WHERE l.purchase_event_id=? ORDER BY l.rowid`, id)
 	if e != nil {
 		return p, e
@@ -158,7 +173,7 @@ func (s *Store) Expenses(ctx context.Context, f ledger.HistoryFilter) ([]ledger.
 	where, args := historyWhere(f, "occurred_at", "category")
 	limit, offset := page(f)
 	args = append(args, limit, offset)
-	rows, e := s.db.QueryContext(ctx, `SELECT * FROM expenses WHERE `+where+` ORDER BY julianday(occurred_at) DESC,rowid DESC LIMIT ? OFFSET ?`, args...)
+	rows, e := s.db.QueryContext(ctx, `SELECT * FROM expenses WHERE `+where+` ORDER BY julianday(occurred_at) DESC,id DESC LIMIT ? OFFSET ?`, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -176,7 +191,7 @@ func (s *Store) Expenses(ctx context.Context, f ledger.HistoryFilter) ([]ledger.
 func (s *Store) ExpenseTotal(ctx context.Context, f ledger.HistoryFilter) (ledger.Money, error) {
 	where, args := historyWhere(f, "occurred_at", "category")
 	var total ledger.Money
-	e := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_cents),0) FROM expenses WHERE `+where, args...).Scan(&total)
+	e := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE type WHEN 'EXPENSE' THEN amount_cents WHEN 'REFUND' THEN -amount_cents ELSE 0 END),0) FROM money_transactions WHERE voided_at='' AND `+where, args...).Scan(&total)
 	return total, e
 }
 func (s *Store) MaintenanceHistory(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Maintenance, error) {
@@ -203,28 +218,20 @@ func (s *Store) MaintenanceHistory(ctx context.Context, f ledger.HistoryFilter) 
 	return out, rows.Err()
 }
 func (s *Store) DurableDetails(ctx context.Context, id string) (ledger.DurableDetails, error) {
-	var d ledger.DurableDetails
-	e := s.db.QueryRowContext(ctx, `SELECT * FROM durable_details WHERE item_id=?`, id).Scan(&d.ItemID, &d.Brand, &d.Model, &d.SerialNumber, &d.PurchaseDate, &d.WarrantyUntil, &d.Status, &d.SoldAt, &d.SoldPrice, &d.Note)
-	if errors.Is(e, sql.ErrNoRows) {
-		return d, ErrNotFound
-	}
-	return d, e
+	return durableDetails(ctx, s.db, id)
 }
 func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.DurablePatch) (ledger.DurableDetails, bool, error) {
 	var d ledger.DurableDetails
 	replay, e := s.ledgerTx(ctx, key, "durable:"+id, p, &d, func(tx *sql.Tx) error {
-		e := tx.QueryRowContext(ctx, `SELECT * FROM durable_details WHERE item_id=?`, id).Scan(&d.ItemID, &d.Brand, &d.Model, &d.SerialNumber, &d.PurchaseDate, &d.WarrantyUntil, &d.Status, &d.SoldAt, &d.SoldPrice, &d.Note)
-		if errors.Is(e, sql.ErrNoRows) {
-			return ErrNotFound
-		}
+		var e error
+		d, e = durableDetails(ctx, tx, id)
 		if e != nil {
 			return e
 		}
-		previousStatus := d.Status
 		for _, v := range []struct {
 			in  *string
 			out *string
-		}{{p.Brand, &d.Brand}, {p.Model, &d.Model}, {p.SerialNumber, &d.SerialNumber}, {p.WarrantyUntil, &d.WarrantyUntil}, {p.Status, &d.Status}, {p.SoldAt, &d.SoldAt}, {p.Note, &d.Note}} {
+		}{{p.Brand, &d.Brand}, {p.Model, &d.Model}, {p.SerialNumber, &d.SerialNumber}, {p.WarrantyUntil, &d.WarrantyUntil}, {p.Note, &d.Note}} {
 			if v.in != nil {
 				*v.out = strings.TrimSpace(*v.in)
 			}
@@ -234,41 +241,27 @@ func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.Dura
 		}
 		if d.WarrantyUntil != "" {
 			if _, e = time.Parse(time.DateOnly, d.WarrantyUntil); e != nil {
-				return fmt.Errorf("%w: warranty date", ledger.ErrInvalid)
-			}
-		}
-		switch d.Status {
-		case "ACTIVE", "SOLD", "LOST", "DISCARDED", "ARCHIVED":
-		default:
-			return fmt.Errorf("%w: durable status", ledger.ErrInvalid)
-		}
-		if d.SoldAt != "" {
-			d.SoldAt, e = ledger.Timestamp(d.SoldAt)
-			if e != nil {
-				return e
-			}
-		}
-		if p.SoldPrice != nil {
-			if *p.SoldPrice < 0 || *p.SoldPrice > 1e12 {
 				return ledger.ErrInvalid
 			}
-			d.SoldPrice = p.SoldPrice
 		}
-		if d.Status == "SOLD" && d.SoldAt == "" {
-			return fmt.Errorf("%w: SOLD needs sold_at", ledger.ErrInvalid)
-		}
-		if d.Status != "ACTIVE" && previousStatus != d.Status {
-			if _, e = mutateInventory(ctx, tx, id, "DISCARD", ledger.InventoryInput{Source: "manual", Note: "Durable status: " + d.Status}, nil); e != nil {
+		if p.Status != nil && *p.Status != d.Status {
+			input := ledger.DurableActionInput{OccurredAt: "", Source: "manual", Note: d.Note}
+			if p.SoldAt != nil {
+				input.OccurredAt = *p.SoldAt
+			}
+			if p.SoldPrice != nil {
+				input.Amount = *p.SoldPrice
+			}
+			if _, e = durableTransition(ctx, tx, id, *p.Status, input); e != nil {
 				return e
 			}
+		} else if p.SoldAt != nil || p.SoldPrice != nil {
+			return fmt.Errorf("%w: use sell_item for sale", ledger.ErrInvalid)
 		}
-		if d.Status == "ACTIVE" && previousStatus != "ACTIVE" {
-			quantity := 1.0
-			if _, e = mutateInventory(ctx, tx, id, "ADJUST", ledger.InventoryInput{Quantity: &quantity, Source: "manual", Note: "Durable status: ACTIVE"}, nil); e != nil {
-				return e
-			}
+		if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET brand=?,model=?,serial_number=?,warranty_until=?,note=? WHERE item_id=?`, d.Brand, d.Model, d.SerialNumber, d.WarrantyUntil, d.Note, id); e != nil {
+			return e
 		}
-		_, e = tx.ExecContext(ctx, `UPDATE durable_details SET brand=?,model=?,serial_number=?,warranty_until=?,status=?,sold_at=?,sold_price_cents=?,note=? WHERE item_id=?`, d.Brand, d.Model, d.SerialNumber, d.WarrantyUntil, d.Status, d.SoldAt, d.SoldPrice, d.Note, id)
+		d, e = durableDetails(ctx, tx, id)
 		return e
 	})
 	return d, replay, e
@@ -347,6 +340,25 @@ func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, 
 		return ledger.Dashboard{}, fmt.Errorf("%w: month must be YYYY-MM", ledger.ErrInvalid)
 	}
 	d := ledger.Dashboard{Month: month, Currency: "CNY"}
+	balance, err := s.Balances(ctx)
+	if err != nil {
+		return d, err
+	}
+	d.TotalBalance = balance.TotalBalance
+	d.AvailableBalance = balance.AvailableBalance
+	from, to, err := ledger.PeriodRange("today", "", "", time.Now())
+	if err != nil {
+		return d, err
+	}
+	if d.TodayExpense, err = s.ExpenseTotal(ctx, ledger.HistoryFilter{From: from, To: to}); err != nil {
+		return d, err
+	}
+	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM durable_details WHERE status IN ('ACTIVE','STORED')`).Scan(&d.DurableCount); err != nil {
+		return d, err
+	}
+	if d.RecentTransactions, err = s.Transactions(ctx, ledger.MoneyFilter{HistoryFilter: ledger.HistoryFilter{Limit: 5}}); err != nil {
+		return d, err
+	}
 	f := ledger.HistoryFilter{From: start.Format(time.RFC3339), To: start.AddDate(0, 1, 0).Format(time.RFC3339)}
 	if d.MonthExpense, e = s.ExpenseTotal(ctx, f); e != nil {
 		return d, e
@@ -354,6 +366,10 @@ func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, 
 	if d.Inventory, e = s.Summary(ctx); e != nil {
 		return d, e
 	}
+	if e = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM items WHERE item_type='CONSUMABLE' AND quantity>0`).Scan(&d.ConsumableCount); e != nil {
+		return d, e
+	}
+
 	if d.RecentPurchases, e = s.Purchases(ctx, ledger.HistoryFilter{Limit: 5}); e != nil {
 		return d, e
 	}

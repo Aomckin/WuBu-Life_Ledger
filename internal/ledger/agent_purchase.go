@@ -7,6 +7,8 @@ import (
 
 // Agent inputs intentionally do not mirror the persistence DTO.
 type AgentPurchaseLine struct {
+	ItemType string  `json:"item_type,omitempty"`
+	Location string  `json:"location,omitempty"`
 	Name     string  `json:"name"`
 	Quantity float64 `json:"quantity"`
 	Unit     string  `json:"unit"`
@@ -14,6 +16,7 @@ type AgentPurchaseLine struct {
 	Spec     string  `json:"spec,omitempty"`
 }
 type AgentPurchaseInput struct {
+	AccountID     string              `json:"account_id,omitempty"`
 	Items         []AgentPurchaseLine `json:"items"`
 	Total         *Money              `json:"total,omitempty"`
 	Merchant      string              `json:"merchant,omitempty"`
@@ -22,7 +25,7 @@ type AgentPurchaseInput struct {
 }
 
 func (a AgentPurchaseInput) PurchaseInput() PurchaseInput {
-	p := PurchaseInput{Merchant: a.Merchant, PaymentMethod: a.PaymentMethod, Note: a.Note, Source: "agent", Currency: "CNY", Items: []PurchaseLine{}}
+	p := PurchaseInput{AccountID: a.AccountID, Merchant: a.Merchant, PaymentMethod: a.PaymentMethod, Note: a.Note, Source: "agent", Currency: "CNY", Items: []PurchaseLine{}}
 	for _, l := range a.Items {
 		price := Money(0)
 		if l.Price != nil {
@@ -34,7 +37,11 @@ func (a AgentPurchaseInput) PurchaseInput() PurchaseInput {
 		if len(a.Items) == 1 && l.Price == nil && a.Total != nil {
 			subtotal = *a.Total
 		}
-		p.Items = append(p.Items, PurchaseLine{Name: l.Name, ProductSpec: inventory.ProductSpec{Spec: l.Spec}, Quantity: l.Quantity, Unit: l.Unit, UnitPrice: price, Subtotal: subtotal, ItemType: Consumable})
+		kind := l.ItemType
+		if kind == "" {
+			kind = Consumable
+		}
+		p.Items = append(p.Items, PurchaseLine{Location: l.Location, Name: l.Name, ProductSpec: inventory.ProductSpec{Spec: l.Spec}, Quantity: l.Quantity, Unit: l.Unit, UnitPrice: price, Subtotal: subtotal, ItemType: kind})
 		p.TotalAmount += subtotal
 	}
 	if a.Total != nil {

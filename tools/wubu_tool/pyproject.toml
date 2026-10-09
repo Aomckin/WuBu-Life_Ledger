@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zhaoxi-wubu-tool"
-version = "0.1.1"
+version = "0.2.0"
 description = "物簿事件 API 的朝汐工具包"
 requires-python = ">=3.12"
 dependencies = ["zhaoxi>=1.4.7,<2", "pydantic>=2.8,<3"]
