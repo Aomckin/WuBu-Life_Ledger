@@ -16,12 +16,32 @@ class PaymentInput(WriteInput):
 class IncomeInput(PaymentInput):
     category: str = Field(default="其他",max_length=100)
 class ExpenseInput(IncomeInput):
+    expense_nature: Literal["", "DAILY", "FIXED", "SETUP", "CAPITAL", "EXCEPTIONAL"] = ""
     merchant: str = Field(default="",max_length=200)
 class TransferInput(WriteInput):
     from_account: str = Field(min_length=1,description="转出账户 ID 或精确名称。")
     to_account: str = Field(min_length=1,description="转入账户 ID 或精确名称。")
     amount: float = Field(gt=0,le=10_000_000_000)
     occurred_at: str = ""
+class TopUpInput(WriteInput):
+    from_account: str = Field(min_length=1,description="STORAGE 转出账户 ID 或精确名称。")
+    to_account: str = Field(min_length=1,description="CONSUMPTION 储值账户 ID 或精确名称。")
+    paid_amount: float = Field(gt=0,le=10_000_000_000,description="实付本金，元。充值不计消费。")
+    credited_amount: float = Field(gt=0,le=10_000_000_000,description="实际到账，元；超过本金部分为赠送，少于本金返回损失提示。")
+    occurred_at: str = ""
+class AccountQuery(EventInput):
+    account_class: Literal["STORAGE","CONSUMPTION"] | None = None
+    merchant: str = Field(default="",max_length=200)
+    active: bool | None = None
+class AccountStatsQuery(EventInput):
+    account_id: str = Field(min_length=1,description="账户 ID 或精确名称。")
+class AccountEditInput(WriteInput):
+    account_id: str = Field(min_length=1,description="账户 ID；编辑分类不会改写历史流水。")
+    account_class: Literal["STORAGE","CONSUMPTION"] | None = None
+    merchant: str | None = Field(default=None,max_length=200)
+    active: bool | None = None
+    name: str | None = Field(default=None,min_length=1,max_length=100)
+    note: str | None = Field(default=None,max_length=2000)
 class ReturnedItem(EventInput):
     item_id: str = Field(min_length=1)
     quantity: float = Field(gt=0,le=1_000_000_000)
@@ -62,7 +82,7 @@ class MoneyQuery(RangeQuery):
     merchant: str = ""
     group_by: Literal["category","merchant","account","item"] | None = None
 class TransactionQuery(MoneyQuery):
-    type: Literal["EXPENSE","INCOME","TRANSFER_OUT","TRANSFER_IN","REFUND","ADJUSTMENT"] | None = None
+    type: Literal["EXPENSE","INCOME","TRANSFER_OUT","TRANSFER_IN","REFUND","ADJUSTMENT","BONUS"] | None = None
     to_account: str = ""
     limit: int = Field(default=20,ge=1,le=500)
     offset: int = Field(default=0,ge=0)
@@ -76,7 +96,9 @@ class CostQuery(RangeQuery):
     item_id: str = Field(min_length=1)
 class AccountInput(WriteInput):
     name: str = Field(min_length=1,max_length=100)
-    type: Literal["WALLET","BANK","CASH","CAMPUS_CARD","CREDIT_CARD","OTHER"] = "OTHER"
+    account_class: Literal["STORAGE","CONSUMPTION"] = "STORAGE"
+    merchant: str = Field(default="",max_length=200)
+    type: Literal["WALLET","BANK","CASH","CAMPUS_CARD","CREDIT_CARD","MERCHANT_BALANCE","OTHER"] = "OTHER"
     initial_balance: float = Field(default=0,ge=-10_000_000_000,le=10_000_000_000)
     credit_limit: float | None = Field(default=None,ge=0,le=10_000_000_000)
 class DefaultAccountInput(EventInput):
@@ -95,19 +117,28 @@ class RealityTool(Tool):
         values=arguments.model_dump(exclude_none=True,by_alias=True)
         key=values.pop("idempotency_key",None);item_id=values.pop("item_id",None)
         kwargs={"item_id":item_id} if item_id else {}
+        if self.name in {"update_account","get_account_statistics"}: kwargs["account_id"]=values.pop("account_id")
         if self.write:
-            if self.name not in {"create_account","set_default_payment_account"}: values["source"]="agent"
+            if self.name not in {"create_account","update_account","set_default_payment_account"}: values["source"]="agent"
             kwargs.update(payload=values,idempotency_key=key)
         else:
             kwargs["query"]={k:v for k,v in values.items() if v!=""}
         try:
             result=await asyncio.to_thread(self.client.call,self.name,**kwargs)
-            return ToolResult(success=True,content=self.description.split("。")[0]+"，已完成。",data=result)
+            content=self.description.split("。")[0]+"，已完成。"
+            if self.name in {"get_balance","get_total_balance"} and "liquid_balance" in result:
+                content=f"自由可用资金 ¥{result['liquid_balance']:.2f}；消费储值 ¥{result['consumption_balance']:.2f}。"
+            if self.name=="top_up_account":
+                legs=result["transactions"];destination=legs[-1]
+                content=f"充值成功：{values['from_account']} ¥{legs[0]['balance_before']:.2f} → ¥{legs[0]['balance_after']:.2f}；{values['to_account']} ¥{legs[1]['balance_before']:.2f} → ¥{destination['balance_after']:.2f}。本金 ¥{values['paid_amount']:.2f}，赠送 ¥{max(0,values['credited_amount']-values['paid_amount']):.2f}，消费 ¥0.00。"
+            warnings=result.get("warnings",[])
+            if warnings: content+="\n"+"\n".join(w["message"] for w in warnings)
+            return ToolResult(success=True,content=content,data=result)
         except WubuError as exc: return failure(exc,key)
 
 def create_reality_tools(client):
     definitions=[
-        ("create_account",AccountInput,"创建资金账户，初始余额自动留下调整历史。信用卡采用净余额，债务为负。",True),
+        ("create_account",AccountInput,"创建存储或消费资金账户，可绑定消费商家；初始余额留下调整历史。信用卡采用净余额，债务为负。",True),
         ("set_default_payment_account",DefaultAccountInput,"设置默认付款账户，后续购买和维护可省略账户。",True),
         ("record_income",IncomeInput,"记录工资等收入并增加账户余额。",True),
         ("record_expense",ExpenseInput,"记录无库存意义的支出，例如打车或餐馆。",True),
@@ -120,10 +151,14 @@ def create_reality_tools(client):
         ("retire_item",ItemWriteInput,"将耐用品退休报废，保留购买和维护历史。",True),
         ("move_item",MoveInput,"移动耐用品，记录位置变化。",True),
         ("set_durable_status",StatusInput,"记录在用、收纳或丢失状态；找到后设为 ACTIVE。",True),
-        ("get_accounts",EmptyInput,"查询资金账户列表。",False),
+        ("get_accounts",AccountQuery,"按存储 / 消费分类、商家和启用状态查询账户列表。",False),
         ("get_balance",BalanceQuery,"查询余额和钱所在的账户。",False),
         ("get_account_balance",BalanceQuery,"查询指定账户余额。",False),
-        ("get_total_balance",EmptyInput,"查询个人总资金净余额。",False),
+        ("get_total_balance",EmptyInput,"分别查询自由可用资金与受限消费储值，避免混成一个可用数字。",False),
+        ("top_up_account",TopUpInput,"给消费账户充值，本金记转账、赠送记 BONUS；原子完成且不计消费或普通收入。",True),
+        ("record_bonus",PaymentInput,"记录商家赠送的会员金，仅允许消费账户，不计普通收入或消费。",True),
+        ("update_account",AccountEditInput,"编辑账户分类、绑定商家或启用状态；历史资金事件不变。",True),
+        ("get_account_statistics",AccountStatsQuery,"查询账户累计充值本金、赠送、消费、退款、净消费、当前余额和赠送比例。",False),
         ("get_expense_summary",MoneyQuery,"由物簿汇总支出、退款、净支出和分类，转账不计消费。",False),
         ("get_income_summary",MoneyQuery,"由物簿汇总收入，排除转账。",False),
         ("get_category_summary",MoneyQuery,"按类别汇总净支出。",False),

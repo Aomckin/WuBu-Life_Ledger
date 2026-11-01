@@ -34,6 +34,8 @@ ROUTES = {
     "get_product_aliases": ("GET", "/items/{item_id}/aliases"),
 }
 ROUTES.update({
+ "top_up_account":("POST","/money/top-ups"),"record_bonus":("POST","/money/bonuses"),
+ "update_account":("PATCH","/accounts/{account_id}"),"get_account_statistics":("GET","/accounts/{account_id}/statistics"),
  "create_account":("POST","/accounts"), "set_default_payment_account":("PATCH","/money/settings"),
  "record_income":("POST","/money/income"),"record_expense":("POST","/money/expenses"),
  "transfer_money":("POST","/money/transfers"),"record_refund":("POST","/money/refunds"),
@@ -47,6 +49,8 @@ ROUTES.update({
  "move_item":("POST","/items/{item_id}/move"),"set_durable_status":("POST","/items/{item_id}/status"),
  "get_durable_items":("GET","/durables"),"get_item_total_cost":("GET","/items/{item_id}/total-cost"),
 })
+ROUTES.update({'create_planned_cashflow': ('POST', '/planned-cashflows'), 'update_planned_cashflow': ('PUT', '/planned-cashflows/{cashflow_id}'), 'cancel_planned_cashflow': ('POST', '/planned-cashflows/{cashflow_id}/cancel'), 'skip_planned_cashflow': ('POST', '/planned-cashflows/{cashflow_id}/skip'), 'complete_planned_cashflow': ('POST', '/planned-cashflows/{cashflow_id}/complete'), 'get_upcoming_cashflows': ('GET', '/planned-cashflows'), 'get_living_runway': ('GET', '/runway'), 'get_runway_settings': ('GET', '/runway/settings'), 'set_runway_settings': ('PATCH', '/runway/settings'), 'get_spending_by_nature': ('GET', '/money/spending-by-nature'), 'update_expense_nature': ('PATCH', '/money/transactions/{transaction_id}/nature')})
+ROUTES.update({'create_residence': ('POST', '/residences'), 'update_residence': ('PUT', '/residences/{residence_id}'), 'get_residences': ('GET', '/residences'), 'link_residence_cost': ('POST', '/residences/{residence_id}/cost-links'), 'get_residence_cost': ('GET', '/residences/{residence_id}/cost'), 'get_relocation_cost': ('GET', '/residences/{residence_id}/relocation-cost'), 'get_residence_durables': ('GET', '/residences/{residence_id}/durables'), 'record_deposit': ('POST', '/deposits'), 'return_deposit': ('POST', '/deposits/{claim_id}/return'), 'forfeit_deposit': ('POST', '/deposits/{claim_id}/forfeit'), 'get_deposits': ('GET', '/deposits'), 'create_receivable': ('POST', '/receivables'), 'settle_receivable': ('POST', '/receivables/{claim_id}/return'), 'cancel_receivable': ('POST', '/receivables/{claim_id}/forfeit'), 'get_receivables': ('GET', '/receivables'), 'get_consumption_forecast': ('GET', '/items/{item_id}/consumption-forecast'), 'get_items_running_low': ('GET', '/items-running-low')})
 ROUTES.update({action+"_by_name": ("POST", "/items/"+action) for action in ("consume", "adjust", "open", "finish", "discard")})
 
 class WubuError(Exception):
@@ -66,11 +70,11 @@ class WubuClient:
         self.base_url = base_url.rstrip("/") + "/api/v1"
         self.timeout = float(timeout)
 
-    def call(self, operation, *, item_id=None, purchase_id=None, payload=None, query=None, idempotency_key=None):
+    def call(self, operation, *, item_id=None, purchase_id=None, account_id=None, cashflow_id=None, transaction_id=None, residence_id=None, claim_id=None, payload=None, query=None, idempotency_key=None):
         if operation not in ROUTES:
             raise ValueError("unsupported operation")
         method, path = ROUTES[operation]
-        for name, value in [("item_id", item_id), ("purchase_id", purchase_id)]:
+        for name, value in [("residence_id", residence_id), ("claim_id", claim_id), ("cashflow_id", cashflow_id), ("transaction_id", transaction_id), ("item_id", item_id), ("purchase_id", purchase_id), ("account_id", account_id)]:
             if "{" + name + "}" in path:
                 if not value:
                     raise ValueError(name + " required")

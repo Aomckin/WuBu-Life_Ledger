@@ -11,7 +11,9 @@ from .event_tools import RecordPurchaseTool, ValidatePurchaseTool, InventoryEven
 from .reality_tools import create_reality_tools
 
 Operation = Literal[
-    "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
+    'create_residence', 'update_residence', 'get_residences', 'link_residence_cost', 'get_residence_cost', 'get_relocation_cost', 'get_residence_durables', 'record_deposit', 'return_deposit', 'forfeit_deposit', 'get_deposits', 'create_receivable', 'settle_receivable', 'cancel_receivable', 'get_receivables', 'get_consumption_forecast', 'get_items_running_low',
+    'create_planned_cashflow', 'update_planned_cashflow', 'cancel_planned_cashflow', 'skip_planned_cashflow', 'complete_planned_cashflow', 'get_upcoming_cashflows', 'get_living_runway', 'get_runway_settings', 'set_runway_settings', 'get_spending_by_nature', 'update_expense_nature',
+    "top_up_account", "record_bonus", "update_account", "get_account_statistics", "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
     "amend_purchase_event", "delete_purchase_event",
     "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item",
     "add_maintenance_event", "add_product_alias", "update_durable_details", "search_items", "resolve_item",
@@ -23,8 +25,13 @@ Operation = Literal[
 class WubuInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation: Operation
+    residence_id: str | None = None
+    claim_id: str | None = None
+    cashflow_id: str | None = None
+    transaction_id: str | None = None
     item_id: str | None = None
     purchase_id: str | None = None
+    account_id: str | None = None
     idempotency_key: str | None = Field(default=None, max_length=200, description="每个现实事件一个稳定 key；超时重试保留此 key 和完全相同的 payload。")
     payload: dict[str, Any] | None = Field(default=None, description="写入 DTO；按 operation 对应的 schema 提供；金额是元，支持两位小数。")
     query: dict[str, str | int | bool] | None = Field(default=None, description="查询参数：search/name/limit/offset/from/to/category/month 等；from/to 为带时区 RFC3339。")
@@ -32,8 +39,13 @@ class WubuInput(BaseModel):
     @model_validator(mode="after")
     def validate_operation(self):
         method, path = ROUTES[self.operation]
+        for field in ("residence_id", "claim_id", "cashflow_id", "transaction_id"):
+            if "{" + field + "}" in path and not getattr(self, field):
+                raise ValueError(field + " required")
         if "{item_id}" in path and not self.item_id:
             raise ValueError("item_id required; search/resolve item first")
+        if "{account_id}" in path and not self.account_id:
+            raise ValueError("account_id required")
         if "{purchase_id}" in path and not self.purchase_id:
             raise ValueError("purchase_id required")
         if method != "GET" and not self.idempotency_key:
@@ -79,7 +91,7 @@ class WubuTool(Tool):
         return self.permission_for(arguments) == PermissionLevel.READ or bool(arguments.get("idempotency_key"))
     async def execute(self, arguments):
         values = arguments.model_dump(exclude={"operation"}, exclude_none=True)
-        if arguments.operation in {"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status"}:
+        if arguments.operation in {"top_up_account", "record_bonus", "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status"}:
             values["payload"] = {**values.get("payload", {}), "source": "agent"}
         try:
             result = await asyncio.to_thread(self.client.call, arguments.operation, **values)
@@ -89,7 +101,7 @@ class WubuTool(Tool):
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "0.2.0"
+    package_version = "0.3.0"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)

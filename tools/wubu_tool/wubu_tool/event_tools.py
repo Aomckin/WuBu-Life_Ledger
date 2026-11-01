@@ -39,6 +39,7 @@ class PurchaseItem(EventInput):
 
 
 class PurchaseInput(EventInput):
+    expense_nature: Literal["", "DAILY", "FIXED", "SETUP", "CAPITAL", "EXCEPTIONAL"] = ""
     account_id: str = Field(default="",description="账户 ID 或精确名称；省略用默认账户。")
     items: list[PurchaseItem] = Field(min_length=1, max_length=500)
     total: float | None = Field(default=None, ge=0, le=10_000_000_000, description="整笔实际付款，元；省略时由明细合计。单商品仅填总价时可推导单价。")

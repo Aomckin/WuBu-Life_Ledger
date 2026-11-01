@@ -1,5 +1,277 @@
 {
   "schemas": {
+    "ResidenceInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "address_text": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "move_in_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "move_out_date": {
+          "type": "string"
+        },
+        "monthly_rent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01
+        },
+        "payment_cycle": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "contract_end_date": {
+          "type": "string"
+        },
+        "network_included": {
+          "type": "boolean"
+        },
+        "management_fee_included": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "PAST",
+            "PLANNED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "name",
+        "move_in_date",
+        "status"
+      ]
+    },
+    "ResidenceLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transaction_id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "RENT",
+            "AGENCY_FEE",
+            "UTILITY",
+            "MANAGEMENT",
+            "NETWORK",
+            "MOVING",
+            "SETUP",
+            "OTHER"
+          ]
+        }
+      },
+      "required": [
+        "transaction_id",
+        "role"
+      ]
+    },
+    "ClaimInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "exclusiveMinimum": 0
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "residence_id": {
+          "type": "string"
+        },
+        "counterparty": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "due_at": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount",
+        "account_id"
+      ]
+    },
+    "ClaimSettlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "exclusiveMinimum": 0
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ]
+    },
+    "PlannedCashflowInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "OUTFLOW",
+            "INFLOW"
+          ]
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "exclusiveMinimum": 0
+        },
+        "due_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "expense_nature": {
+          "type": "string",
+          "enum": [
+            "",
+            "DAILY",
+            "FIXED",
+            "SETUP",
+            "CAPITAL",
+            "EXCEPTIONAL"
+          ]
+        },
+        "recurrence": {
+          "type": "string",
+          "enum": [
+            "",
+            "WEEKLY",
+            "MONTHLY",
+            "YEARLY",
+            "CUSTOM"
+          ]
+        },
+        "interval_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3660
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "name",
+        "direction",
+        "amount",
+        "due_at",
+        "mandatory"
+      ]
+    },
+    "PlannedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string"
+        }
+      }
+    },
+    "RunwaySettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safety_buffer": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01
+        },
+        "runway_horizon_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3660
+        }
+      },
+      "required": [
+        "safety_buffer",
+        "runway_horizon_days"
+      ]
+    },
+    "ExpenseNatureInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expense_nature": {
+          "type": "string",
+          "enum": [
+            "",
+            "DAILY",
+            "FIXED",
+            "SETUP",
+            "CAPITAL",
+            "EXCEPTIONAL"
+          ]
+        }
+      },
+      "required": [
+        "expense_nature"
+      ]
+    },
     "PurchaseInput": {
       "type": "object",
       "properties": {
@@ -78,6 +350,17 @@
           "type": "string",
           "maxLength": 200,
           "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "expense_nature": {
+          "type": "string",
+          "enum": [
+            "",
+            "DAILY",
+            "FIXED",
+            "SETUP",
+            "CAPITAL",
+            "EXCEPTIONAL"
+          ]
         }
       },
       "required": [
@@ -603,6 +886,22 @@
         "note": {
           "type": "string",
           "maxLength": 2000
+        },
+        "has_original_packaging": {
+          "type": "boolean"
+        },
+        "purchase_proof": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "estimated_resale_value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01
+        },
+        "residence_id": {
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -641,7 +940,8 @@
             "CASH",
             "CAMPUS_CARD",
             "CREDIT_CARD",
-            "OTHER"
+            "OTHER",
+            "MERCHANT_BALANCE"
           ],
           "default": "OTHER"
         },
@@ -668,6 +968,19 @@
         "note": {
           "type": "string",
           "maxLength": 2000
+        },
+        "account_class": {
+          "type": "string",
+          "enum": [
+            "STORAGE",
+            "CONSUMPTION"
+          ],
+          "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE.",
+          "default": "STORAGE"
+        },
+        "merchant": {
+          "type": "string",
+          "maxLength": 200
         }
       },
       "required": [
@@ -781,6 +1094,17 @@
         "note": {
           "type": "string",
           "maxLength": 2000
+        },
+        "expense_nature": {
+          "type": "string",
+          "enum": [
+            "",
+            "DAILY",
+            "FIXED",
+            "SETUP",
+            "CAPITAL",
+            "EXCEPTIONAL"
+          ]
         }
       },
       "required": [
@@ -1008,6 +1332,147 @@
       },
       "required": [],
       "additionalProperties": false
+    },
+    "AccountPatch": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "credit_limit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "account_class": {
+          "type": "string",
+          "enum": [
+            "STORAGE",
+            "CONSUMPTION"
+          ],
+          "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE."
+        },
+        "merchant": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "TopUpInput": {
+      "type": "object",
+      "properties": {
+        "from_account": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "to_account": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "paid_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents.",
+          "exclusiveMinimum": 0
+        },
+        "credited_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents.",
+          "exclusiveMinimum": 0
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "from_account",
+        "to_account",
+        "paid_amount",
+        "credited_amount"
+      ],
+      "additionalProperties": false
+    },
+    "BonusInput": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000000,
+          "multipleOf": 0.01,
+          "description": "CNY yuan, persisted as integer cents."
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "external_id": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occurred_at": {
+          "type": "string",
+          "description": "RFC3339 with timezone; empty/omitted defaults to now."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "agent",
+            "import",
+            "system",
+            "receipt"
+          ],
+          "default": "manual"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "additionalProperties": false,
+      "description": "Positive restricted gift value; account must be CONSUMPTION. Excluded from ordinary income and expense."
     }
   },
   "inputs": {
@@ -1022,6 +1487,9 @@
     "update_durable_details": "DurablePatch",
     "amend_purchase_event": "PurchaseAmendment",
     "delete_purchase_event": "PurchaseDeletion",
+    "top_up_account": "TopUpInput",
+    "record_bonus": "BonusInput",
+    "update_account": "AccountPatch",
     "create_account": "AccountInput",
     "set_default_payment_account": "MoneySettings",
     "record_income": "IncomeInput",
@@ -1034,6 +1502,22 @@
     "sell_item": "DurableActionInput",
     "retire_item": "DurableActionInput",
     "move_item": "DurableActionInput",
-    "set_durable_status": "DurableActionInput"
+    "set_durable_status": "DurableActionInput",
+    "create_planned_cashflow": "PlannedCashflowInput",
+    "update_planned_cashflow": "PlannedCashflowInput",
+    "cancel_planned_cashflow": "PlannedAction",
+    "skip_planned_cashflow": "PlannedAction",
+    "complete_planned_cashflow": "PlannedAction",
+    "set_runway_settings": "RunwaySettings",
+    "update_expense_nature": "ExpenseNatureInput",
+    "create_residence": "ResidenceInput",
+    "update_residence": "ResidenceInput",
+    "link_residence_cost": "ResidenceLink",
+    "record_deposit": "ClaimInput",
+    "return_deposit": "ClaimSettlement",
+    "forfeit_deposit": "ClaimSettlement",
+    "create_receivable": "ClaimInput",
+    "settle_receivable": "ClaimSettlement",
+    "cancel_receivable": "ClaimSettlement"
   }
 }
