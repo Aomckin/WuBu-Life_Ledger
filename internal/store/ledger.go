@@ -75,6 +75,20 @@ func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.Pur
 		if e != nil {
 			return e
 		}
+		if p.ExpenseNature == "" && len(p.Items) > 0 {
+			allDurable := true
+			for _, line := range p.Items {
+				if line.ItemType != ledger.Durable {
+					allDurable = false
+				}
+			}
+			if allDurable {
+				p.ExpenseNature = "CAPITAL"
+			}
+		}
+		if e = bindPurchaseAccount(ctx, tx, &p); e != nil {
+			return e
+		}
 		if e = applyDueTx(ctx, tx); e != nil {
 			return e
 		}

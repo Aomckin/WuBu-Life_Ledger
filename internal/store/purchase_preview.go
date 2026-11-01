@@ -22,6 +22,9 @@ func (s *Store) ValidatePurchase(ctx context.Context, input ledger.PurchaseInput
 		return out, e
 	}
 	defer tx.Rollback()
+	if e = bindPurchaseAccount(ctx, tx, &p); e != nil {
+		return out, e
+	}
 	out.PurchaseInput = p
 	account, e := paymentAccountTx(ctx, tx, p.AccountID, p.PaymentMethod)
 	if e != nil {

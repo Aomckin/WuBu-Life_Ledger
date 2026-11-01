@@ -57,6 +57,9 @@ func getPurchase(ctx context.Context, db purchaseReader, id string) (ledger.Purc
 	if e != nil {
 		return p, e
 	}
+	if e = db.QueryRowContext(ctx, `SELECT expense_nature FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at='' ORDER BY rowid DESC LIMIT 1`, id).Scan(&p.ExpenseNature); e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return p, e
+	}
 	var refunded ledger.Money
 	if e = db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_cents),0) FROM money_transactions WHERE purchase_event_id=? AND type='REFUND' AND voided_at=''`, id).Scan(&refunded); e != nil {
 		return p, e
@@ -258,6 +261,34 @@ func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.Dura
 		} else if p.SoldAt != nil || p.SoldPrice != nil {
 			return fmt.Errorf("%w: use sell_item for sale", ledger.ErrInvalid)
 		}
+		if p.HasOriginalPackaging != nil {
+			d.HasOriginalPackaging = p.HasOriginalPackaging
+		}
+		if p.PurchaseProof != nil {
+			if len([]rune(*p.PurchaseProof)) > 2000 {
+				return ledger.ErrInvalid
+			}
+			d.PurchaseProof = *p.PurchaseProof
+		}
+		if p.EstimatedResaleValue != nil {
+			if *p.EstimatedResaleValue < 0 || *p.EstimatedResaleValue > 1e12 {
+				return ledger.ErrInvalid
+			}
+			d.EstimatedResaleValue = p.EstimatedResaleValue
+		}
+		if p.ResidenceID != nil {
+			d.ResidenceID = *p.ResidenceID
+		}
+		var residence any
+		if d.ResidenceID != "" {
+			residence = d.ResidenceID
+			if _, err := scanResidence(tx.QueryRowContext(ctx, `SELECT `+residenceColumns+` FROM residences WHERE id=?`, d.ResidenceID)); err != nil {
+				return err
+			}
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET has_original_packaging=?,purchase_proof=?,estimated_resale_cents=?,residence_id=? WHERE item_id=?`, d.HasOriginalPackaging, d.PurchaseProof, d.EstimatedResaleValue, residence, id); e != nil {
+			return e
+		}
 		if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET brand=?,model=?,serial_number=?,warranty_until=?,note=? WHERE item_id=?`, d.Brand, d.Model, d.SerialNumber, d.WarrantyUntil, d.Note, id); e != nil {
 			return e
 		}
@@ -344,6 +375,10 @@ func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, 
 	if err != nil {
 		return d, err
 	}
+	d.LiquidBalance = balance.LiquidBalance
+	d.ConsumptionBalance = balance.ConsumptionBalance
+	d.TotalValue = balance.TotalValue
+	d.Accounts = balance.Accounts
 	d.TotalBalance = balance.TotalBalance
 	d.AvailableBalance = balance.AvailableBalance
 	from, to, err := ledger.PeriodRange("today", "", "", time.Now())

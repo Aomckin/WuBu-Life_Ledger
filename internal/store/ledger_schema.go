@@ -18,7 +18,20 @@ func (s *Store) migrateLedger(ctx context.Context) error {
 	if err := s.migrateProducts(ctx); err != nil {
 		return err
 	}
-	return s.migrateMoney(ctx)
+	if err := s.migrateMoney(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateAccountClasses(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateRunway(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateLiving(ctx); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `PRAGMA user_version=12`)
+	return err
 }
 
 const ledgerSchema = `

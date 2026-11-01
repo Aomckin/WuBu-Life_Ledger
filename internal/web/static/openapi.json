@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Personal money and item lifecycle database based on Stockroom. One purchase transaction updates money, items, stock and history. CNY only. Bind to loopback by default. Optional AI Intake changes inventory only; use purchases to record expenses."
   },
   "servers": [
@@ -1065,7 +1065,7 @@
         ],
         "operationId": "record_purchase_event",
         "summary": "record purchase event",
-        "description": "一个事务内统一解析名称、规格和别名，自动创建新消耗品，记录购买、支出、库存与完整事件。返回金额/规格 Warning 和库存摘要。名称歧义返回 ITEM_AMBIGUOUS 候选，失败不保留幂等键。",
+        "description": "一个事务内统一解析名称、规格和别名，自动创建新消耗品，记录购买、支出、库存与完整事件。返回金额/规格 Warning 和库存摘要。名称歧义返回 ITEM_AMBIGUOUS 候选，失败不保留幂等键。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1324,7 +1324,7 @@
         ],
         "operationId": "amend_purchase_event",
         "summary": "修改整笔购买记录",
-        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。",
+        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
         "parameters": [
           {
             "name": "id",
@@ -3094,7 +3094,7 @@
         ],
         "operationId": "record_purchase",
         "summary": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。",
-        "description": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。",
+        "description": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3161,7 +3161,7 @@
         ],
         "operationId": "validate_purchase",
         "summary": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。",
-        "description": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。",
+        "description": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
         "parameters": [],
         "responses": {
           "400": {
@@ -3591,7 +3591,35 @@
         ],
         "operationId": "get_accounts",
         "summary": "get accounts",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "account_class",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "STORAGE",
+                "CONSUMPTION"
+              ],
+              "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE."
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -3690,7 +3718,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "Initial balance is recorded as ADJUSTMENT with reason INITIAL_BALANCE, including zero. CREDIT_CARD uses net balance; debt is negative.",
+        "description": "Initial balance is recorded as ADJUSTMENT with reason INITIAL_BALANCE, including zero. CREDIT_CARD uses net balance; debt is negative. Account class defaults to STORAGE without guessing from type; CONSUMPTION merchant binding is optional.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3818,7 +3846,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "",
+        "description": "Change current account class, merchant binding, name, credit limit, note or active state without rewriting any money history. Deactivating a consumption account with positive value returns ACCOUNT_HAS_REMAINING_BALANCE warning and preserves value. Choose another default before deactivation.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3998,7 +4026,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "No account_id: all real account net balances, excluding unknown; available balance excludes credit cards and inactive accounts. With account_id: one account."
+        "description": "Returns separate liquid_balance and consumption_balance; total_value is their sum. Active STORAGE contributes to liquid, active CONSUMPTION to restricted value. Unknown and credit cards excluded from both. available_balance aliases liquid; total_balance retains legacy net semantics. Classification follows current account class, without historical versioning."
       }
     },
     "/api/v1/money/expenses": {
@@ -4489,7 +4517,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -4660,7 +4689,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -4815,7 +4845,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -4970,7 +5001,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -5125,7 +5157,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -5280,7 +5313,8 @@
                 "TRANSFER_OUT",
                 "TRANSFER_IN",
                 "REFUND",
-                "ADJUSTMENT"
+                "ADJUSTMENT",
+                "BONUS"
               ]
             }
           },
@@ -6245,6 +6279,1526 @@
                 "$ref": "#/components/schemas/MoneyImportInput"
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/money/top-ups": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "top_up_account",
+        "summary": "top up account",
+        "description": "Atomic STORAGE -> CONSUMPTION top up: paired principal transfers plus BONUS for positive difference. Equal amounts generate no BONUS. Value loss generates ADJUSTMENT and TOP_UP_VALUE_LOSS warning. Stable Idempotency-Key prevents duplicate principal and gift. All amounts positive; source and destination must differ and be active. Does not count as ordinary income or consumption.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopUpInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/bonuses": {
+      "post": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "record_bonus",
+        "summary": "record bonus",
+        "description": "Bonus-only merchant gift, allowed only into active CONSUMPTION accounts. Not ordinary income or expense.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BonusInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{id}/statistics": {
+      "get": {
+        "tags": [
+          "Money"
+        ],
+        "operationId": "get_account_statistics",
+        "summary": "get account statistics",
+        "description": "Lifetime actual top-up principal, BONUS, gross expense, refunds linked to this original paying account even when refunded elsewhere, net expense and current balance; ratio is zero with no top-up principal. Current account class interprets balances; no class history reconstruction.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict or idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountStatistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planned-cashflows": {
+      "post": {
+        "operationId": "create_planned_cashflow",
+        "summary": "create_planned_cashflow",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedCashflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlannedCashflowInput"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_upcoming_cashflows",
+        "summary": "get_upcoming_cashflows",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PlannedCashflow"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/planned-cashflows/{cashflow_id}": {
+      "put": {
+        "operationId": "update_planned_cashflow",
+        "summary": "update_planned_cashflow",
+        "parameters": [
+          {
+            "name": "cashflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedCashflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlannedCashflowInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planned-cashflows/{cashflow_id}/cancel": {
+      "post": {
+        "operationId": "cancel_planned_cashflow",
+        "summary": "cancel_planned_cashflow",
+        "parameters": [
+          {
+            "name": "cashflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedCashflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlannedAction"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planned-cashflows/{cashflow_id}/skip": {
+      "post": {
+        "operationId": "skip_planned_cashflow",
+        "summary": "skip_planned_cashflow",
+        "parameters": [
+          {
+            "name": "cashflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedCashflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlannedAction"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planned-cashflows/{cashflow_id}/complete": {
+      "post": {
+        "operationId": "complete_planned_cashflow",
+        "summary": "complete_planned_cashflow",
+        "parameters": [
+          {
+            "name": "cashflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedCashflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlannedAction"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runway": {
+      "get": {
+        "operationId": "get_living_runway",
+        "summary": "get_living_runway",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivingRunway"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/runway/settings": {
+      "get": {
+        "operationId": "get_runway_settings",
+        "summary": "get_runway_settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunwaySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "set_runway_settings",
+        "summary": "set_runway_settings",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunwaySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunwaySettings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/money/spending-by-nature": {
+      "get": {
+        "operationId": "get_spending_by_nature",
+        "summary": "get_spending_by_nature",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingByNature"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/money/transactions/{transaction_id}/nature": {
+      "patch": {
+        "operationId": "update_expense_nature",
+        "summary": "update_expense_nature",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyTransaction"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "State or idempotency conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseNatureInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/residences": {
+      "post": {
+        "operationId": "create_residence",
+        "summary": "create_residence",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Residence"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResidenceInput"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_residences",
+        "summary": "get_residences",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Residence"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/residences/{residence_id}": {
+      "put": {
+        "operationId": "update_residence",
+        "summary": "update_residence",
+        "parameters": [
+          {
+            "name": "residence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Residence"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResidenceInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/residences/{residence_id}/cost-links": {
+      "post": {
+        "operationId": "link_residence_cost",
+        "summary": "link_residence_cost",
+        "parameters": [
+          {
+            "name": "residence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResidenceLink"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/residences/{residence_id}/cost": {
+      "get": {
+        "operationId": "get_residence_cost",
+        "summary": "get_residence_cost",
+        "parameters": [
+          {
+            "name": "residence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResidenceCost"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/residences/{residence_id}/relocation-cost": {
+      "get": {
+        "operationId": "get_relocation_cost",
+        "summary": "get_relocation_cost",
+        "parameters": [
+          {
+            "name": "residence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResidenceCost"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/residences/{residence_id}/durables": {
+      "get": {
+        "operationId": "get_residence_durables",
+        "summary": "get_residence_durables",
+        "parameters": [
+          {
+            "name": "residence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DurableDetails"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/deposits": {
+      "post": {
+        "operationId": "record_deposit",
+        "summary": "record_deposit",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimInput"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_deposits",
+        "summary": "get_deposits",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Claim"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/deposits/{claim_id}/return": {
+      "post": {
+        "operationId": "return_deposit",
+        "summary": "return_deposit",
+        "parameters": [
+          {
+            "name": "claim_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSettlement"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deposits/{claim_id}/forfeit": {
+      "post": {
+        "operationId": "forfeit_deposit",
+        "summary": "forfeit_deposit",
+        "parameters": [
+          {
+            "name": "claim_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSettlement"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/receivables": {
+      "post": {
+        "operationId": "create_receivable",
+        "summary": "create_receivable",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimInput"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_receivables",
+        "summary": "get_receivables",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Claim"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/receivables/{claim_id}/return": {
+      "post": {
+        "operationId": "settle_receivable",
+        "summary": "settle_receivable",
+        "parameters": [
+          {
+            "name": "claim_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSettlement"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/receivables/{claim_id}/forfeit": {
+      "post": {
+        "operationId": "cancel_receivable",
+        "summary": "cancel_receivable",
+        "parameters": [
+          {
+            "name": "claim_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSettlement"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/items/{item_id}/consumption-forecast": {
+      "get": {
+        "operationId": "get_consumption_forecast",
+        "summary": "get_consumption_forecast",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionForecast"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/items-running-low": {
+      "get": {
+        "operationId": "get_items_running_low",
+        "summary": "get_items_running_low",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConsumptionForecast"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Domain validation error"
           }
         }
       }
@@ -7634,6 +9188,17 @@
             "type": "string",
             "maxLength": 200,
             "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
           }
         },
         "required": [
@@ -8474,6 +10039,22 @@
               "integer",
               "null"
             ]
+          },
+          "has_original_packaging": {
+            "type": "boolean"
+          },
+          "purchase_proof": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "estimated_resale_value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "residence_id": {
+            "type": "string"
           }
         },
         "required": [
@@ -8531,6 +10112,22 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "has_original_packaging": {
+            "type": "boolean"
+          },
+          "purchase_proof": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "estimated_resale_value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "residence_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -8605,6 +10202,33 @@
           },
           "consumable_count": {
             "type": "integer"
+          },
+          "liquid_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "consumption_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "total_value": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            }
           }
         },
         "required": [
@@ -9013,6 +10637,17 @@
             "type": "string",
             "maxLength": 200,
             "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
           }
         }
       },
@@ -9322,7 +10957,8 @@
               "CASH",
               "CAMPUS_CARD",
               "CREDIT_CARD",
-              "OTHER"
+              "OTHER",
+              "MERCHANT_BALANCE"
             ],
             "default": "OTHER"
           },
@@ -9349,6 +10985,19 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "account_class": {
+            "type": "string",
+            "enum": [
+              "STORAGE",
+              "CONSUMPTION"
+            ],
+            "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE.",
+            "default": "STORAGE"
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
           }
         },
         "required": [
@@ -9375,7 +11024,8 @@
               "CASH",
               "CAMPUS_CARD",
               "CREDIT_CARD",
-              "OTHER"
+              "OTHER",
+              "MERCHANT_BALANCE"
             ],
             "default": "OTHER"
           },
@@ -9413,13 +11063,34 @@
           "updated_at": {
             "type": "string",
             "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "account_class": {
+            "type": "string",
+            "enum": [
+              "STORAGE",
+              "CONSUMPTION"
+            ],
+            "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE."
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyWarning"
+            }
           }
         },
         "required": [
           "id",
           "name",
           "current_balance",
-          "active"
+          "active",
+          "account_class",
+          "merchant",
+          "warnings"
         ],
         "additionalProperties": false
       },
@@ -9443,6 +11114,18 @@
             "maximum": 10000000000,
             "multipleOf": 0.01,
             "description": "CNY yuan, persisted as integer cents."
+          },
+          "account_class": {
+            "type": "string",
+            "enum": [
+              "STORAGE",
+              "CONSUMPTION"
+            ],
+            "description": "Current fund-use boundary, independent of account type. Existing accounts migrate to STORAGE."
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
           }
         },
         "required": [],
@@ -9658,6 +11341,17 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
           }
         },
         "required": [
@@ -9853,7 +11547,8 @@
               "TRANSFER_OUT",
               "TRANSFER_IN",
               "REFUND",
-              "ADJUSTMENT"
+              "ADJUSTMENT",
+              "BONUS"
             ]
           },
           "amount": {
@@ -9938,6 +11633,17 @@
           "voided_at": {
             "type": "string",
             "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
           }
         },
         "required": [
@@ -9959,6 +11665,15 @@
             "items": {
               "$ref": "#/components/schemas/MoneyTransaction"
             }
+          },
+          "warnings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MoneyWarning"
+            }
           }
         },
         "required": [
@@ -9977,20 +11692,41 @@
             "minimum": -10000000000,
             "maximum": 10000000000,
             "multipleOf": 0.01,
-            "description": "Signed net balance or delta in CNY yuan."
+            "description": "Legacy net balance across all real accounts, including credit cards and inactive accounts; not a liquid-funds indicator."
           },
           "available_balance": {
             "type": "number",
             "minimum": -10000000000,
             "maximum": 10000000000,
             "multipleOf": 0.01,
-            "description": "Signed net balance or delta in CNY yuan."
+            "description": "Compatibility alias for liquid_balance; excludes restricted funds, inactive accounts, credit cards, unknown."
           },
           "accounts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Account"
             }
+          },
+          "liquid_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "consumption_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "total_value": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "liquid_balance + consumption_balance, enabled real non-credit accounts only."
           }
         },
         "required": [
@@ -10067,6 +11803,13 @@
             "items": {
               "$ref": "#/components/schemas/MoneyGroup"
             }
+          },
+          "bonus": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
           }
         },
         "required": [],
@@ -10426,6 +12169,805 @@
         },
         "required": [],
         "additionalProperties": false
+      },
+      "MoneyWarning": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "TOP_UP_VALUE_LOSS",
+              "ACCOUNT_HAS_REMAINING_BALANCE"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "TopUpInput": {
+        "type": "object",
+        "properties": {
+          "from_account": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "to_account": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "paid_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents.",
+            "exclusiveMinimum": 0
+          },
+          "credited_amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents.",
+            "exclusiveMinimum": 0
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "from_account",
+          "to_account",
+          "paid_amount",
+          "credited_amount"
+        ],
+        "additionalProperties": false
+      },
+      "BonusInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "additionalProperties": false,
+        "description": "Positive restricted gift value; account must be CONSUMPTION. Excluded from ordinary income and expense."
+      },
+      "AccountStatistics": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "top_up_principal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "bonus": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "expense": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "refund": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "net_expense": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "current_balance": {
+            "type": "number",
+            "minimum": -10000000000,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "Signed net balance or delta in CNY yuan."
+          },
+          "bonus_ratio": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "account_id",
+          "top_up_principal",
+          "bonus",
+          "expense",
+          "refund",
+          "net_expense",
+          "current_balance",
+          "bonus_ratio"
+        ],
+        "additionalProperties": false
+      },
+      "PlannedCashflowInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "OUTFLOW",
+              "INFLOW"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "exclusiveMinimum": 0
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
+          },
+          "recurrence": {
+            "type": "string",
+            "enum": [
+              "",
+              "WEEKLY",
+              "MONTHLY",
+              "YEARLY",
+              "CUSTOM"
+            ]
+          },
+          "interval_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3660
+          },
+          "mandatory": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "name",
+          "direction",
+          "amount",
+          "due_at",
+          "mandatory"
+        ]
+      },
+      "PlannedAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          }
+        }
+      },
+      "RunwaySettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "safety_buffer": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "runway_horizon_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3660
+          }
+        },
+        "required": [
+          "safety_buffer",
+          "runway_horizon_days"
+        ]
+      },
+      "ExpenseNatureInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
+          }
+        },
+        "required": [
+          "expense_nature"
+        ]
+      },
+      "ResidenceInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address_text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "move_in_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "move_out_date": {
+            "type": "string"
+          },
+          "monthly_rent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "payment_cycle": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "contract_end_date": {
+            "type": "string"
+          },
+          "network_included": {
+            "type": "boolean"
+          },
+          "management_fee_included": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAST",
+              "PLANNED"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "name",
+          "move_in_date",
+          "status"
+        ]
+      },
+      "ResidenceLink": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "transaction_id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "RENT",
+              "AGENCY_FEE",
+              "UTILITY",
+              "MANAGEMENT",
+              "NETWORK",
+              "MOVING",
+              "SETUP",
+              "OTHER"
+            ]
+          }
+        },
+        "required": [
+          "transaction_id",
+          "role"
+        ]
+      },
+      "ClaimInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "exclusiveMinimum": 0
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "residence_id": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "due_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "account_id"
+        ]
+      },
+      "ClaimSettlement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "exclusiveMinimum": 0
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "LivingRunway": {
+        "type": "object",
+        "properties": {
+          "liquid_balance": {
+            "type": "number"
+          },
+          "reserved_outflow": {
+            "type": "number"
+          },
+          "expected_income": {
+            "type": "number"
+          },
+          "safety_buffer": {
+            "type": "number"
+          },
+          "safe_to_spend": {
+            "type": "number"
+          },
+          "safe_daily_spend": {
+            "type": "number"
+          },
+          "runway_horizon_days": {
+            "type": "integer"
+          },
+          "days_to_next_income": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "NEXT_INCOME",
+              "FIXED_HORIZON"
+            ]
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cashflow_warning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PlannedCashflow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "OUTFLOW",
+              "INFLOW"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "exclusiveMinimum": 0
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "expense_nature": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAILY",
+              "FIXED",
+              "SETUP",
+              "CAPITAL",
+              "EXCEPTIONAL"
+            ]
+          },
+          "recurrence": {
+            "type": "string",
+            "enum": [
+              "",
+              "WEEKLY",
+              "MONTHLY",
+              "YEARLY",
+              "CUSTOM"
+            ]
+          },
+          "interval_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3660
+          },
+          "mandatory": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "linked_transaction_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "SpendingByNature": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "total_spending": {
+            "type": "number"
+          },
+          "normalized_living_cost": {
+            "type": "number"
+          },
+          "unclassified": {
+            "type": "number"
+          }
+        }
+      },
+      "Residence": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address_text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "move_in_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "move_out_date": {
+            "type": "string"
+          },
+          "monthly_rent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "payment_cycle": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "contract_end_date": {
+            "type": "string"
+          },
+          "network_included": {
+            "type": "boolean"
+          },
+          "management_fee_included": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAST",
+              "PLANNED"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "ResidenceCost": {
+        "type": "object",
+        "properties": {
+          "residence_id": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "consumed_cost": {
+            "type": "number"
+          },
+          "setup_cost": {
+            "type": "number"
+          },
+          "capital_cost": {
+            "type": "number"
+          },
+          "deposit_locked": {
+            "type": "number"
+          },
+          "deposit_loss": {
+            "type": "number"
+          },
+          "net_cash_outflow": {
+            "type": "number"
+          }
+        }
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "exclusiveMinimum": 0
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "residence_id": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "due_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "source_transaction_id": {
+            "type": "string"
+          },
+          "settlement_transaction_id": {
+            "type": "string"
+          },
+          "returned_at": {
+            "type": "string"
+          },
+          "returned_amount": {
+            "type": "number"
+          },
+          "forfeited_amount": {
+            "type": "number"
+          }
+        }
+      },
+      "ConsumptionForecast": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string"
+          },
+          "current_quantity": {
+            "type": "number"
+          },
+          "average_daily_consumption": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "estimated_days_remaining": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "event_count": {
+            "type": "integer"
+          },
+          "effective_days": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "INSUFFICIENT_DATA"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          }
+        }
       }
     }
   }

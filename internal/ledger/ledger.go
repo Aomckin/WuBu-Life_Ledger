@@ -45,6 +45,7 @@ func (m Money) MarshalJSON() ([]byte, error) {
 }
 
 type PurchaseInput struct {
+	ExpenseNature string         `json:"expense_nature,omitempty"`
 	AccountID     string         `json:"account_id,omitempty"`
 	Merchant      string         `json:"merchant"`
 	PurchasedAt   string         `json:"purchased_at"`
@@ -139,31 +140,39 @@ type InventoryResult struct {
 	Event InventoryEvent `json:"event"`
 }
 type DurableDetails struct {
-	PurchasePrice   Money  `json:"purchase_price"`
-	PurchaseEventID string `json:"purchase_event_id"`
-	Location        string `json:"location"`
-	UseDays         int    `json:"use_days"`
-	WarrantyDays    *int   `json:"warranty_days"`
-	ItemID          string `json:"item_id"`
-	Brand           string `json:"brand"`
-	Model           string `json:"model"`
-	SerialNumber    string `json:"serial_number"`
-	PurchaseDate    string `json:"purchase_date"`
-	WarrantyUntil   string `json:"warranty_until"`
-	Status          string `json:"status"`
-	SoldAt          string `json:"sold_at"`
-	SoldPrice       *Money `json:"sold_price"`
-	Note            string `json:"note"`
+	HasOriginalPackaging *bool  `json:"has_original_packaging"`
+	PurchaseProof        string `json:"purchase_proof"`
+	EstimatedResaleValue *Money `json:"estimated_resale_value"`
+	ResidenceID          string `json:"residence_id"`
+	PurchasePrice        Money  `json:"purchase_price"`
+	PurchaseEventID      string `json:"purchase_event_id"`
+	Location             string `json:"location"`
+	UseDays              int    `json:"use_days"`
+	WarrantyDays         *int   `json:"warranty_days"`
+	ItemID               string `json:"item_id"`
+	Brand                string `json:"brand"`
+	Model                string `json:"model"`
+	SerialNumber         string `json:"serial_number"`
+	PurchaseDate         string `json:"purchase_date"`
+	WarrantyUntil        string `json:"warranty_until"`
+	Status               string `json:"status"`
+	SoldAt               string `json:"sold_at"`
+	SoldPrice            *Money `json:"sold_price"`
+	Note                 string `json:"note"`
 }
 type DurablePatch struct {
-	Brand         *string `json:"brand"`
-	Model         *string `json:"model"`
-	SerialNumber  *string `json:"serial_number"`
-	WarrantyUntil *string `json:"warranty_until"`
-	Status        *string `json:"status"`
-	SoldAt        *string `json:"sold_at"`
-	SoldPrice     *Money  `json:"sold_price"`
-	Note          *string `json:"note"`
+	HasOriginalPackaging *bool   `json:"has_original_packaging,omitempty"`
+	PurchaseProof        *string `json:"purchase_proof,omitempty"`
+	EstimatedResaleValue *Money  `json:"estimated_resale_value,omitempty"`
+	ResidenceID          *string `json:"residence_id,omitempty"`
+	Brand                *string `json:"brand"`
+	Model                *string `json:"model"`
+	SerialNumber         *string `json:"serial_number"`
+	WarrantyUntil        *string `json:"warranty_until"`
+	Status               *string `json:"status"`
+	SoldAt               *string `json:"sold_at"`
+	SoldPrice            *Money  `json:"sold_price"`
+	Note                 *string `json:"note"`
 }
 type MaintenanceInput struct {
 	AccountID   string `json:"account_id,omitempty"`
@@ -214,6 +223,10 @@ type Price struct {
 	Subtotal        Money   `json:"subtotal"`
 }
 type Dashboard struct {
+	LiquidBalance      SignedMoney        `json:"liquid_balance"`
+	ConsumptionBalance SignedMoney        `json:"consumption_balance"`
+	TotalValue         SignedMoney        `json:"total_value"`
+	Accounts           []Account          `json:"accounts"`
 	ConsumableCount    int                `json:"consumable_count"`
 	TotalBalance       SignedMoney        `json:"total_balance"`
 	AvailableBalance   SignedMoney        `json:"available_balance"`
@@ -261,6 +274,12 @@ func Source(s string) (string, error) {
 	return "", fmt.Errorf("%w: unsupported source", ErrInvalid)
 }
 func ValidatePurchase(p PurchaseInput) (PurchaseInput, error) {
+	switch p.ExpenseNature {
+	case "", "DAILY", "FIXED", "SETUP", "CAPITAL", "EXCEPTIONAL":
+	default:
+		return p, ErrInvalid
+	}
+
 	p.Items = append([]PurchaseLine(nil), p.Items...)
 	var e error
 	p.Merchant = strings.TrimSpace(p.Merchant)

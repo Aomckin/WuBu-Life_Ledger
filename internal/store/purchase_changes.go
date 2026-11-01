@@ -48,6 +48,15 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 		if e != nil {
 			return e
 		}
+		if p.ExpenseNature == "" {
+			p.ExpenseNature = before.ExpenseNature
+		}
+		if p.AccountID == "" {
+			p.AccountID = before.AccountID
+		}
+		if e = bindPurchaseAccount(ctx, tx, &p); e != nil {
+			return e
+		}
 		if p.Source != before.Source || p.ExternalID != before.ExternalID {
 			return fmt.Errorf("%w: 改单不能更换原始来源或外部编号。", ledger.ErrInvalid)
 		}

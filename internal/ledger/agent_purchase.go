@@ -16,6 +16,7 @@ type AgentPurchaseLine struct {
 	Spec     string  `json:"spec,omitempty"`
 }
 type AgentPurchaseInput struct {
+	ExpenseNature string              `json:"expense_nature,omitempty"`
 	AccountID     string              `json:"account_id,omitempty"`
 	Items         []AgentPurchaseLine `json:"items"`
 	Total         *Money              `json:"total,omitempty"`
@@ -25,7 +26,7 @@ type AgentPurchaseInput struct {
 }
 
 func (a AgentPurchaseInput) PurchaseInput() PurchaseInput {
-	p := PurchaseInput{AccountID: a.AccountID, Merchant: a.Merchant, PaymentMethod: a.PaymentMethod, Note: a.Note, Source: "agent", Currency: "CNY", Items: []PurchaseLine{}}
+	p := PurchaseInput{ExpenseNature: a.ExpenseNature, AccountID: a.AccountID, Merchant: a.Merchant, PaymentMethod: a.PaymentMethod, Note: a.Note, Source: "agent", Currency: "CNY", Items: []PurchaseLine{}}
 	for _, l := range a.Items {
 		price := Money(0)
 		if l.Price != nil {

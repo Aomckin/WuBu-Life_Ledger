@@ -23,7 +23,20 @@ func (m *SignedMoney) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+const StorageAccount = "STORAGE"
+const ConsumptionAccount = "CONSUMPTION"
+
+// Merchant mismatches require explicit account or merchant correction before payment.
+var ErrAccountMerchantMismatch = fmt.Errorf("%w: ACCOUNT_MERCHANT_MISMATCH", ErrConflict)
+
+type AccountFilter struct {
+	AccountClass, Merchant string
+	Active                 *bool
+}
+
 type AccountInput struct {
+	AccountClass   string      `json:"account_class,omitempty"`
+	Merchant       string      `json:"merchant,omitempty"`
 	Name           string      `json:"name"`
 	Type           string      `json:"type"`
 	Currency       string      `json:"currency"`
@@ -32,6 +45,9 @@ type AccountInput struct {
 	Note           string      `json:"note"`
 }
 type Account struct {
+	AccountClass   string      `json:"account_class"`
+	Merchant       string      `json:"merchant"`
+	Warnings       []Warning   `json:"warnings"`
 	ID             string      `json:"id"`
 	Name           string      `json:"name"`
 	Type           string      `json:"type"`
@@ -44,10 +60,12 @@ type Account struct {
 	UpdatedAt      string      `json:"updated_at"`
 }
 type AccountPatch struct {
-	Name        *string `json:"name,omitempty"`
-	Active      *bool   `json:"active,omitempty"`
-	Note        *string `json:"note,omitempty"`
-	CreditLimit *Money  `json:"credit_limit,omitempty"`
+	AccountClass *string `json:"account_class,omitempty"`
+	Merchant     *string `json:"merchant,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	Active       *bool   `json:"active,omitempty"`
+	Note         *string `json:"note,omitempty"`
+	CreditLimit  *Money  `json:"credit_limit,omitempty"`
 }
 type MoneySettings struct {
 	DefaultPaymentAccount string `json:"default_payment_account"`
@@ -57,6 +75,7 @@ type ReturnItem struct {
 	Quantity float64 `json:"quantity"`
 }
 type MoneyInput struct {
+	ExpenseNature        string       `json:"expense_nature,omitempty"`
 	AccountID            string       `json:"account_id,omitempty"`
 	FromAccount          string       `json:"from_account,omitempty"`
 	ToAccount            string       `json:"to_account,omitempty"`
@@ -74,6 +93,7 @@ type MoneyInput struct {
 	ReturnItems          []ReturnItem `json:"return_items,omitempty"`
 }
 type MoneyTransaction struct {
+	ExpenseNature        string      `json:"expense_nature"`
 	ID                   string      `json:"id"`
 	AccountID            string      `json:"account_id"`
 	Type                 string      `json:"type"`
@@ -94,7 +114,27 @@ type MoneyTransaction struct {
 	CreatedAt            string      `json:"created_at"`
 	VoidedAt             string      `json:"voided_at,omitempty"`
 }
+type TopUpInput struct {
+	FromAccount    string `json:"from_account"`
+	ToAccount      string `json:"to_account"`
+	PaidAmount     Money  `json:"paid_amount"`
+	CreditedAmount Money  `json:"credited_amount"`
+	OccurredAt     string `json:"occurred_at,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Note           string `json:"note,omitempty"`
+}
+type AccountStatistics struct {
+	AccountID      string      `json:"account_id"`
+	TopUpPrincipal Money       `json:"top_up_principal"`
+	Bonus          Money       `json:"bonus"`
+	Expense        Money       `json:"expense"`
+	Refund         Money       `json:"refund"`
+	NetExpense     SignedMoney `json:"net_expense"`
+	CurrentBalance SignedMoney `json:"current_balance"`
+	BonusRatio     float64     `json:"bonus_ratio"`
+}
 type MoneyResult struct {
+	Warnings     []Warning          `json:"warnings"`
 	Transactions []MoneyTransaction `json:"transactions"`
 }
 type MoneyFilter struct {
@@ -107,6 +147,7 @@ type MoneyGroup struct {
 	Count  int         `json:"count"`
 }
 type MoneySummary struct {
+	Bonus       Money        `json:"bonus"`
 	Currency    string       `json:"currency"`
 	Expense     Money        `json:"expense"`
 	Refund      Money        `json:"refund"`
@@ -116,10 +157,13 @@ type MoneySummary struct {
 	Groups      []MoneyGroup `json:"groups"`
 }
 type BalanceSummary struct {
-	Currency         string      `json:"currency"`
-	TotalBalance     SignedMoney `json:"total_balance"`
-	AvailableBalance SignedMoney `json:"available_balance"`
-	Accounts         []Account   `json:"accounts"`
+	LiquidBalance      SignedMoney `json:"liquid_balance"`
+	ConsumptionBalance SignedMoney `json:"consumption_balance"`
+	TotalValue         SignedMoney `json:"total_value"`
+	Currency           string      `json:"currency"`
+	TotalBalance       SignedMoney `json:"total_balance"`
+	AvailableBalance   SignedMoney `json:"available_balance"`
+	Accounts           []Account   `json:"accounts"`
 }
 type DurableEvent struct {
 	ID         string `json:"id"`

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"stockroom/internal/ledger"
@@ -27,8 +28,19 @@ func writeLedger[T any](a *API, status int, fn func(*http.Request, T) (any, bool
 	}
 }
 func (a *API) registerMoney(m *http.ServeMux) {
+	a.registerRunway(m)
 	m.HandleFunc("GET /api/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
-		out, e := a.store.Accounts(r.Context())
+		q := r.URL.Query()
+		f := ledger.AccountFilter{AccountClass: q.Get("account_class"), Merchant: q.Get("merchant")}
+		if v := q.Get("active"); v != "" {
+			active, e := strconv.ParseBool(v)
+			if e != nil {
+				a.ledgerError(w, r, ledger.ErrInvalid)
+				return
+			}
+			f.Active = &active
+		}
+		out, e := a.store.Accounts(r.Context(), f)
 		if e != nil {
 			a.ledgerError(w, r, e)
 			return
@@ -46,6 +58,17 @@ func (a *API) registerMoney(m *http.ServeMux) {
 		}
 		writeJSON(w, 200, out)
 	})
+	m.HandleFunc("GET /api/v1/accounts/{id}/statistics", func(w http.ResponseWriter, r *http.Request) {
+		out, e := a.store.AccountStatistics(r.Context(), r.PathValue("id"))
+		if e != nil {
+			a.ledgerError(w, r, e)
+			return
+		}
+		writeJSON(w, 200, out)
+	})
+	m.HandleFunc("POST /api/v1/money/top-ups", writeLedger(a, 201, func(r *http.Request, p ledger.TopUpInput) (any, bool, error) {
+		return a.store.TopUpAccount(r.Context(), r.Header.Get("Idempotency-Key"), p)
+	}))
 	m.HandleFunc("PATCH /api/v1/accounts/{id}", writeLedger(a, 200, func(r *http.Request, p ledger.AccountPatch) (any, bool, error) {
 		return a.store.PatchAccount(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
 	}))
@@ -77,7 +100,7 @@ func (a *API) registerMoney(m *http.ServeMux) {
 	m.HandleFunc("PATCH /api/v1/money/settings", writeLedger(a, 200, func(r *http.Request, p ledger.MoneySettings) (any, bool, error) {
 		return a.store.SetMoneySettings(r.Context(), r.Header.Get("Idempotency-Key"), p)
 	}))
-	for path, kind := range map[string]string{"expenses": "EXPENSE", "income": "INCOME", "transfers": "TRANSFER", "refunds": "REFUND", "adjustments": "ADJUSTMENT", "reconcile": "ADJUSTMENT"} {
+	for path, kind := range map[string]string{"expenses": "EXPENSE", "income": "INCOME", "transfers": "TRANSFER", "refunds": "REFUND", "adjustments": "ADJUSTMENT", "reconcile": "ADJUSTMENT", "bonuses": "BONUS"} {
 		m.HandleFunc("POST /api/v1/money/"+path, writeLedger(a, 201, func(r *http.Request, p ledger.MoneyInput) (any, bool, error) {
 			return a.store.MoneyAction(r.Context(), r.Header.Get("Idempotency-Key"), kind, p)
 		}))

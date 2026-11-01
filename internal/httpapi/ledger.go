@@ -58,6 +58,8 @@ func (a *API) ledgerError(w http.ResponseWriter, r *http.Request, e error) {
 		return
 	}
 	switch {
+	case errors.Is(e, ledger.ErrAccountMerchantMismatch):
+		writeJSON(w, 409, errorBody{Error: errorDetail{Code: "ACCOUNT_MERCHANT_MISMATCH", Message: e.Error(), SuggestedAction: "choose_matching_account_or_correct_merchant"}, RequestID: requestID(r.Context())})
 	case errors.Is(e, ledger.ErrInvalid):
 		a.errorResponse(w, r, 422, "validation_error", e.Error(), nil)
 	case errors.Is(e, ledger.ErrIdempotency):

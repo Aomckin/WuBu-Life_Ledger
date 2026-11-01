@@ -12,11 +12,11 @@ import (
 	"stockroom/internal/ledger"
 )
 
-const durableColumns = `item_id,brand,model,serial_number,purchase_date,warranty_until,status,sold_at,sold_price_cents,note`
+const durableColumns = `item_id,brand,model,serial_number,purchase_date,warranty_until,status,sold_at,sold_price_cents,note,has_original_packaging,purchase_proof,estimated_resale_cents,COALESCE(residence_id,'')`
 
 func durableDetails(ctx context.Context, db purchaseReader, id string) (ledger.DurableDetails, error) {
 	var d ledger.DurableDetails
-	e := db.QueryRowContext(ctx, `SELECT `+durableColumns+` FROM durable_details WHERE item_id=?`, id).Scan(&d.ItemID, &d.Brand, &d.Model, &d.SerialNumber, &d.PurchaseDate, &d.WarrantyUntil, &d.Status, &d.SoldAt, &d.SoldPrice, &d.Note)
+	e := db.QueryRowContext(ctx, `SELECT `+durableColumns+` FROM durable_details WHERE item_id=?`, id).Scan(&d.ItemID, &d.Brand, &d.Model, &d.SerialNumber, &d.PurchaseDate, &d.WarrantyUntil, &d.Status, &d.SoldAt, &d.SoldPrice, &d.Note, &d.HasOriginalPackaging, &d.PurchaseProof, &d.EstimatedResaleValue, &d.ResidenceID)
 	if errors.Is(e, sql.ErrNoRows) {
 		return d, ErrNotFound
 	}

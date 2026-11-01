@@ -13,20 +13,24 @@ import (
 	"stockroom/internal/ledger"
 )
 
-const accountColumns = `id,name,type,currency,balance_cents,credit_limit_cents,active,note,created_at,updated_at`
-const transactionColumns = `id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,purchase_event_id,maintenance_event_id,related_transaction_id,external_id,occurred_at,source,note,reason,created_at,voided_at`
+const accountColumns = `id,name,type,currency,balance_cents,credit_limit_cents,active,note,created_at,updated_at,account_class,merchant`
+const transactionColumns = `id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,purchase_event_id,maintenance_event_id,related_transaction_id,external_id,occurred_at,source,note,reason,created_at,voided_at,expense_nature`
 
 func scanAccount(r scanner) (ledger.Account, error) {
 	var a ledger.Account
-	e := r.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.CurrentBalance, &a.CreditLimit, &a.Active, &a.Note, &a.CreatedAt, &a.UpdatedAt)
+	e := r.Scan(&a.ID, &a.Name, &a.Type, &a.Currency, &a.CurrentBalance, &a.CreditLimit, &a.Active, &a.Note, &a.CreatedAt, &a.UpdatedAt, &a.AccountClass, &a.Merchant)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrNotFound
+	}
+	a.Warnings = []ledger.Warning{}
+	if !a.Active && a.AccountClass == ledger.ConsumptionAccount && a.CurrentBalance > 0 {
+		a.Warnings = append(a.Warnings, ledger.Warning{Code: "ACCOUNT_HAS_REMAINING_BALANCE", Message: "消费账户仍有余额，停用后不会计入消费储值汇总；记录与余额仍保留。"})
 	}
 	return a, e
 }
 func scanMoney(r scanner) (ledger.MoneyTransaction, error) {
 	var t ledger.MoneyTransaction
-	e := r.Scan(&t.ID, &t.AccountID, &t.Type, &t.Amount, &t.BalanceDelta, &t.BalanceBefore, &t.BalanceAfter, &t.Category, &t.Merchant, &t.PurchaseEventID, &t.MaintenanceEventID, &t.RelatedTransactionID, &t.ExternalID, &t.OccurredAt, &t.Source, &t.Note, &t.Reason, &t.CreatedAt, &t.VoidedAt)
+	e := r.Scan(&t.ID, &t.AccountID, &t.Type, &t.Amount, &t.BalanceDelta, &t.BalanceBefore, &t.BalanceAfter, &t.Category, &t.Merchant, &t.PurchaseEventID, &t.MaintenanceEventID, &t.RelatedTransactionID, &t.ExternalID, &t.OccurredAt, &t.Source, &t.Note, &t.Reason, &t.CreatedAt, &t.VoidedAt, &t.ExpenseNature)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrNotFound
 	}
@@ -53,8 +57,30 @@ func accountTx(ctx context.Context, tx *sql.Tx, id string) (ledger.Account, erro
 func (s *Store) GetAccount(ctx context.Context, id string) (ledger.Account, error) {
 	return scanAccount(s.db.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=? OR name=?`, id, id))
 }
-func (s *Store) Accounts(ctx context.Context) ([]ledger.Account, error) {
-	rows, e := s.db.QueryContext(ctx, `SELECT `+accountColumns+` FROM accounts ORDER BY rowid`)
+func (s *Store) Accounts(ctx context.Context, filters ...ledger.AccountFilter) ([]ledger.Account, error) {
+	where, args := "1=1", []any{}
+	if len(filters) > 0 {
+		f := filters[0]
+		if f.AccountClass != "" {
+			if !validAccountClass(f.AccountClass) {
+				return nil, ledger.ErrInvalid
+			}
+			where += " AND account_class=?"
+			args = append(args, f.AccountClass)
+		}
+		if len([]rune(f.Merchant)) > 200 {
+			return nil, ledger.ErrInvalid
+		}
+		if f.Merchant != "" {
+			where += " AND merchant=?"
+			args = append(args, f.Merchant)
+		}
+		if f.Active != nil {
+			where += " AND active=?"
+			args = append(args, *f.Active)
+		}
+	}
+	rows, e := s.db.QueryContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE `+where+` ORDER BY rowid`, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -78,9 +104,15 @@ func (s *Store) Balances(ctx context.Context) (ledger.BalanceSummary, error) {
 		}
 		out.TotalBalance += v.CurrentBalance
 		if v.Active && v.Type != "CREDIT_CARD" {
-			out.AvailableBalance += v.CurrentBalance
+			if v.AccountClass == ledger.ConsumptionAccount {
+				out.ConsumptionBalance += v.CurrentBalance
+			} else {
+				out.LiquidBalance += v.CurrentBalance
+			}
 		}
 	}
+	out.AvailableBalance = out.LiquidBalance
+	out.TotalValue = out.LiquidBalance + out.ConsumptionBalance
 	return out, e
 }
 func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountInput) (ledger.Account, bool, error) {
@@ -88,6 +120,14 @@ func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountI
 	replay, e := s.ledgerTx(ctx, key, "create_account", p, &out, func(tx *sql.Tx) error {
 		p.Name = strings.TrimSpace(p.Name)
 		p.Type = strings.ToUpper(p.Type)
+		p.AccountClass = strings.ToUpper(p.AccountClass)
+		if p.AccountClass == "" {
+			p.AccountClass = ledger.StorageAccount
+		}
+		p.Merchant = strings.TrimSpace(p.Merchant)
+		if !validAccountClass(p.AccountClass) || len([]rune(p.Merchant)) > 200 {
+			return ledger.ErrInvalid
+		}
 		if p.Type == "" {
 			p.Type = "OTHER"
 		}
@@ -98,7 +138,7 @@ func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountI
 			return ledger.ErrInvalid
 		}
 		switch p.Type {
-		case "WALLET", "BANK", "CASH", "CAMPUS_CARD", "CREDIT_CARD", "OTHER":
+		case "WALLET", "BANK", "CASH", "CAMPUS_CARD", "CREDIT_CARD", "MERCHANT_BALANCE", "OTHER":
 		default:
 			return ledger.ErrInvalid
 		}
@@ -114,7 +154,7 @@ func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountI
 		}
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		id := uuid.NewString()
-		if _, e := tx.ExecContext(ctx, `INSERT INTO accounts VALUES(?,?,?,?,0,?,1,?,?,?)`, id, p.Name, p.Type, p.Currency, p.CreditLimit, p.Note, now, now); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO accounts(`+accountColumns+`) VALUES(?,?,?,?,0,?,1,?,?,?,?,?)`, id, p.Name, p.Type, p.Currency, p.CreditLimit, p.Note, now, now, p.AccountClass, p.Merchant); e != nil {
 			return e
 		}
 		amount := ledger.Money(p.InitialBalance)
@@ -139,6 +179,15 @@ func (s *Store) PatchAccount(ctx context.Context, key, id string, p ledger.Accou
 		}
 		if id == "unknown" {
 			return fmt.Errorf("%w: migration account is reserved", ledger.ErrConflict)
+		}
+		if p.AccountClass != nil {
+			a.AccountClass = strings.ToUpper(*p.AccountClass)
+		}
+		if p.Merchant != nil {
+			a.Merchant = strings.TrimSpace(*p.Merchant)
+		}
+		if !validAccountClass(a.AccountClass) || len([]rune(a.Merchant)) > 200 {
+			return ledger.ErrInvalid
 		}
 		if p.Name != nil {
 			a.Name = strings.TrimSpace(*p.Name)
@@ -175,8 +224,11 @@ func (s *Store) PatchAccount(ctx context.Context, key, id string, p ledger.Accou
 			}
 		}
 		a.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-		_, e = tx.ExecContext(ctx, `UPDATE accounts SET name=?,active=?,note=?,credit_limit_cents=?,updated_at=? WHERE id=?`, a.Name, a.Active, a.Note, a.CreditLimit, a.UpdatedAt, id)
-		out = a
+		_, e = tx.ExecContext(ctx, `UPDATE accounts SET name=?,active=?,note=?,credit_limit_cents=?,updated_at=?,account_class=?,merchant=? WHERE id=?`, a.Name, a.Active, a.Note, a.CreditLimit, a.UpdatedAt, a.AccountClass, a.Merchant, id)
+		if e != nil {
+			return e
+		}
+		out, e = scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=?`, id))
 		return e
 	})
 	return out, r, e
@@ -206,6 +258,9 @@ func (s *Store) SetMoneySettings(ctx context.Context, key string, p ledger.Money
 // postMoney records before/after and updates the balance within the caller's reality event transaction.
 func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput, maintenance string, delta ledger.SignedMoney) (ledger.MoneyTransaction, error) {
 	var out ledger.MoneyTransaction
+	if !validNature(p.ExpenseNature) {
+		return out, ledger.ErrInvalid
+	}
 	if p.Amount < 0 || p.Amount > 1e12 || len(p.Category) > 100 || len([]rune(p.Merchant)) > 200 || len(p.ExternalID) > 200 || len([]rune(p.Note)) > 2000 || len([]rune(p.Reason)) > 2000 {
 		return out, ledger.ErrInvalid
 	}
@@ -220,6 +275,14 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 	a, e := accountTx(ctx, tx, p.AccountID)
 	if e != nil {
 		return out, e
+	}
+	if kind == "BONUS" && a.AccountClass != ledger.ConsumptionAccount {
+		return out, fmt.Errorf("%w: BONUS requires CONSUMPTION account", ledger.ErrInvalid)
+	}
+	if kind == "EXPENSE" {
+		if e = accountMerchant(a, &p.Merchant); e != nil {
+			return out, e
+		}
 	}
 	if p.ExternalID != "" {
 		var n int
@@ -237,8 +300,8 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 		p.Category = "other"
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	out = ledger.MoneyTransaction{ID: uuid.NewString(), AccountID: a.ID, Type: kind, Amount: p.Amount, BalanceDelta: delta, BalanceBefore: a.CurrentBalance, BalanceAfter: a.CurrentBalance + delta, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.PurchaseEventID, MaintenanceEventID: maintenance, RelatedTransactionID: p.RelatedTransactionID, ExternalID: p.ExternalID, OccurredAt: at, Source: source, Note: p.Note, Reason: p.Reason, CreatedAt: now}
-	_, e = tx.ExecContext(ctx, `INSERT INTO money_transactions(`+transactionColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, out.AccountID, out.Type, out.Amount, out.BalanceDelta, out.BalanceBefore, out.BalanceAfter, out.Category, out.Merchant, out.PurchaseEventID, out.MaintenanceEventID, out.RelatedTransactionID, out.ExternalID, out.OccurredAt, out.Source, out.Note, out.Reason, out.CreatedAt, out.VoidedAt)
+	out = ledger.MoneyTransaction{ID: uuid.NewString(), AccountID: a.ID, Type: kind, Amount: p.Amount, BalanceDelta: delta, BalanceBefore: a.CurrentBalance, BalanceAfter: a.CurrentBalance + delta, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.PurchaseEventID, MaintenanceEventID: maintenance, RelatedTransactionID: p.RelatedTransactionID, ExternalID: p.ExternalID, OccurredAt: at, Source: source, Note: p.Note, Reason: p.Reason, CreatedAt: now, ExpenseNature: p.ExpenseNature}
+	_, e = tx.ExecContext(ctx, `INSERT INTO money_transactions(`+transactionColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, out.AccountID, out.Type, out.Amount, out.BalanceDelta, out.BalanceBefore, out.BalanceAfter, out.Category, out.Merchant, out.PurchaseEventID, out.MaintenanceEventID, out.RelatedTransactionID, out.ExternalID, out.OccurredAt, out.Source, out.Note, out.Reason, out.CreatedAt, out.VoidedAt, out.ExpenseNature)
 	if e != nil {
 		return out, e
 	}
@@ -263,7 +326,7 @@ func purchasePayment(ctx context.Context, tx *sql.Tx, p *ledger.Purchase) (ledge
 		return ledger.MoneyTransaction{}, e
 	}
 	p.AccountID = account.ID
-	t, e := postMoney(ctx, tx, "EXPENSE", ledger.MoneyInput{AccountID: p.AccountID, Amount: p.TotalAmount, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.ID, OccurredAt: p.PurchasedAt, Source: p.Source, Note: p.Note}, "", -ledger.SignedMoney(p.TotalAmount))
+	t, e := postMoney(ctx, tx, "EXPENSE", ledger.MoneyInput{AccountID: p.AccountID, ExpenseNature: p.ExpenseNature, Amount: p.TotalAmount, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.ID, OccurredAt: p.PurchasedAt, Source: p.Source, Note: p.Note}, "", -ledger.SignedMoney(p.TotalAmount))
 	if e != nil {
 		return t, e
 	}
@@ -317,7 +380,7 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 			x.RelatedTransactionID = y.ID
 			out.Transactions = []ledger.MoneyTransaction{x, y}
 			return nil
-		case "EXPENSE", "INCOME", "ADJUSTMENT", "REFUND":
+		case "EXPENSE", "INCOME", "ADJUSTMENT", "REFUND", "BONUS":
 			if p.FromAccount != "" || p.ToAccount != "" {
 				return ledger.ErrInvalid
 			}
@@ -394,6 +457,9 @@ func refundOriginal(ctx context.Context, tx *sql.Tx, p ledger.MoneyInput) (ledge
 	if e != nil {
 		return t, e
 	}
+	if t.Reason == "DEPOSIT_LOSS" || t.Reason == "RECEIVABLE_LOSS" {
+		return t, ledger.ErrConflict
+	}
 	if t.Type != "EXPENSE" || t.VoidedAt != "" || p.PurchaseEventID != "" && t.PurchaseEventID != p.PurchaseEventID {
 		return t, ledger.ErrConflict
 	}
@@ -464,7 +530,11 @@ func correctPurchaseMoney(ctx context.Context, tx *sql.Tx, before ledger.Purchas
 		if after.AccountID == "" {
 			after.AccountID = before.AccountID
 		}
-		_, e = purchasePayment(ctx, tx, after)
+		var replacement ledger.MoneyTransaction
+		replacement, e = purchasePayment(ctx, tx, after)
+		if e == nil {
+			_, e = tx.ExecContext(ctx, `INSERT INTO residence_cost_links(transaction_id,residence_id,role) SELECT ?,residence_id,role FROM residence_cost_links WHERE transaction_id=?`, replacement.ID, t.ID)
+		}
 	}
 	return e
 }

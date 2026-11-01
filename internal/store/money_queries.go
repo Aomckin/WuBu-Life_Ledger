@@ -30,7 +30,7 @@ func moneyWhere(f ledger.MoneyFilter, includeVoided bool) (string, []any, error)
 	}
 	if f.Type != "" {
 		switch f.Type {
-		case "EXPENSE", "INCOME", "TRANSFER_OUT", "TRANSFER_IN", "REFUND", "ADJUSTMENT":
+		case "EXPENSE", "INCOME", "TRANSFER_OUT", "TRANSFER_IN", "REFUND", "ADJUSTMENT", "BONUS":
 		default:
 			return "", nil, ledger.ErrInvalid
 		}
@@ -69,7 +69,7 @@ func (s *Store) MoneySummary(ctx context.Context, f ledger.MoneyFilter) (ledger.
 	if e != nil {
 		return out, e
 	}
-	e = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE WHEN m.type='EXPENSE' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='REFUND' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='INCOME' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='TRANSFER_OUT' THEN amount_cents ELSE 0 END),0) FROM money_transactions m WHERE `+where, args...).Scan(&out.Expense, &out.Refund, &out.Income, &out.TransferOut)
+	e = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE WHEN m.type='EXPENSE' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='REFUND' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='INCOME' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='TRANSFER_OUT' THEN amount_cents ELSE 0 END),0),COALESCE(SUM(CASE WHEN m.type='BONUS' THEN amount_cents ELSE 0 END),0) FROM money_transactions m WHERE `+where, args...).Scan(&out.Expense, &out.Refund, &out.Income, &out.TransferOut, &out.Bonus)
 	if e != nil {
 		return out, e
 	}
