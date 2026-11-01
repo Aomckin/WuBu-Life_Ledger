@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/stockroom ./cmd/stockroom
 
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata ffmpeg poppler-utils \
     && addgroup -S -g 10001 stockroom \
     && adduser -S -D -H -u 10001 -G stockroom stockroom \
