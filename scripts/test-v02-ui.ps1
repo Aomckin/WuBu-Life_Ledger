@@ -1,4 +1,4 @@
-param([string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '')
+param([string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '', [ValidatePattern('^[a-z0-9-]+$')][string]$ScreenshotPrefix = 'v02')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $projectRoot
@@ -39,8 +39,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'UI acceptance failed' }
     if ($ScreenshotDirectory) {
         New-Item -ItemType Directory -Path $ScreenshotDirectory -Force | Out-Null
-        foreach ($name in @('overview','durables','mobile')) {
-            Copy-Item -LiteralPath (Join-Path $testDirectory "$name.png") -Destination (Join-Path $ScreenshotDirectory "v02-$name.png")
+        foreach ($name in @('overview','durables','mobile','accounts')) {
+            Copy-Item -LiteralPath (Join-Path $testDirectory "$name.png") -Destination (Join-Path $ScreenshotDirectory "$ScreenshotPrefix-$name.png")
         }
     }
 } finally {

@@ -1,4 +1,4 @@
-﻿param([ValidateRange(1,65535)][int]$Port = 8026, [switch]$NoBuild, [switch]$Background)
+param([ValidateRange(1,65535)][int]$Port = 8026, [switch]$NoBuild, [switch]$Background)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $projectRoot
@@ -20,12 +20,12 @@ if (-not $NoBuild -or -not (Test-Path -LiteralPath $binary)) {
         $env:GOMODCACHE = Join-Path $projectRoot '.tools\mod-cache'
     }
     New-Item -ItemType Directory -Force (Split-Path $binary -Parent) | Out-Null
-    & $goCommand build -trimpath -ldflags '-s -w -X main.version=0.2.0' -o $binary ./cmd/stockroom
+    & $goCommand build -trimpath -ldflags '-s -w -X main.version=0.3.0' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Wubu build failed' }
 }
 $env:LISTEN_ADDR = "127.0.0.1:$Port"
 $env:DATABASE_PATH = Join-Path $projectRoot 'data\wubu.db'
-Write-Host "物簿 v0.1.1: http://127.0.0.1:$Port (Ctrl+C 停止)"
+Write-Host "物簿 v0.3.0: http://127.0.0.1:$Port (Ctrl+C 停止)"
 if ($Background) {
     New-Item -ItemType Directory -Force (Split-Path $processRecord -Parent) | Out-Null
     $process = Start-Process -FilePath $binary -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $projectRoot '.runtime\app.out.log') -RedirectStandardError (Join-Path $projectRoot '.runtime\app.err.log')
