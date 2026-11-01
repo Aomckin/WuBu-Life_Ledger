@@ -93,3 +93,15 @@ REST 对应 `/api/v1/purchases/record`、`/purchases/validate`、`/items/consume
 record_purchase 保留短参数，新增 account_id 和商品行 item_type/location，支持直接购买独立耐用品。create_account 可用初始真实余额建账户；set_default_payment_account 后常见购买和维护不必重复传账户。
 
 scripts/test.ps1 的真实 SDK 验收新增 integration_v02.py，在独立临时库完成购买 → 维护 → 收纳/移动 → 售出，以及转账重试、退款、收入、余额核对和服务端汇总。所有 schema 均可生成，账户余额可从 MoneyTransaction 重算。完整说明见 [v0.2 交付](V0.2_DELIVERY.md)。
+
+## v0.2.1 Account Classes
+
+工具包版本 0.2.1，新增 top_up_account、record_bonus、update_account、get_account_statistics；create_account 可指定 STORAGE / CONSUMPTION、可选绑定 merchant 与 MERCHANT_BALANCE type。get_accounts 可按分类、商家、启用状态查询。get_balance 明确区分自由资金与消费储值；不会只把受限余额与现金相加回答可用资金。
+
+“充 100 送 10”调用一次 top_up_account，全部本金转账和赠送共用同一事务及稳定幂等键。实际购买再调用 record_purchase。消费账户绑定商家自动补全遗漏的购买 merchant；明显冲突返回 ACCOUNT_MERCHANT_MISMATCH，需选择匹配的账户或纠正商家。余额不足仍遵守现有净余额规则，没有引入自动充值。
+
+分类修改只影响按当前分类解释的余额汇总，历史资金事件保持原样。消费账户统计按原支出关联所有退款，支持退到存储账户。真实 SDK、HTTP 与临时 SQLite 验收新增 integration_v021.py；未向朝汐安装或激活工具。完整规则与验收见 [v0.2.1 交付](V0.2.1_DELIVERY.md)。
+
+## v0.3 适配（2026-11-01）
+
+本仓库包支持 Living Runway、计划收支、支出性质、居住 / 押金、耐用品补充资料、消耗预测与实际代垫结算，集中在已有 wubu 操作入口。参见 [交付记录](V0.3_DELIVERY.md) 与 tools/wubu_tool/README.md。未到账收入 / 待收款不得口述为可花余额；INSUFFICIENT_DATA 不得编造剩余天数。create_receivable 记录本次真实代垫，不能对已入账历史支出重复扣款。本轮仅只读导入 SDK 验证，未安装、启用或重启朝汐。
