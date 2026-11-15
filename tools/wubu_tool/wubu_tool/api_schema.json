@@ -1473,6 +1473,268 @@
       ],
       "additionalProperties": false,
       "description": "Positive restricted gift value; account must be CONSUMPTION. Excluded from ordinary income and expense."
+    },
+    "RawFinancialInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider_code": {
+          "type": "string"
+        },
+        "description_raw": {
+          "type": "string"
+        },
+        "payment_method_raw": {
+          "type": "string"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "review_reason": {
+          "type": "string"
+        },
+        "time_precision": {
+          "type": "string",
+          "enum": [
+            "",
+            "DAY",
+            "SECOND"
+          ]
+        },
+        "related_transaction_id": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "WECHAT",
+            "ALIPAY",
+            "BANK",
+            "UNIONPAY",
+            "CASH",
+            "OTHER"
+          ]
+        },
+        "capture_source": {
+          "type": "string",
+          "enum": [
+            "CSV_IMPORT",
+            "MANUAL",
+            "AGENT",
+            "SYSTEM"
+          ]
+        },
+        "external_id": {
+          "type": "string"
+        },
+        "captured_at": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number",
+          "nullable": true
+        },
+        "direction": {
+          "type": "string"
+        },
+        "merchant_raw": {
+          "type": "string"
+        },
+        "payment_channel": {
+          "type": "string"
+        },
+        "funding_hint": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "raw_title": {
+          "type": "string"
+        },
+        "raw_text": {
+          "type": "string"
+        },
+        "raw_payload": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "capture_source",
+        "raw_text"
+      ]
+    },
+    "FinancialReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "number",
+          "nullable": true
+        },
+        "occurred_at": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string",
+          "description": "EXPENSE, INCOME, REFUND, or TRANSFER_IN/TRANSFER_OUT for MATCH only; transfer legs are never created independently."
+        },
+        "related_transaction_id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "MATCH",
+            "CREATE_NEW",
+            "IGNORE"
+          ]
+        },
+        "transaction_id": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "merchant": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "reason"
+      ]
+    },
+    "TransactionAnnotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "nullable": true
+        },
+        "expense_nature": {
+          "type": "string",
+          "nullable": true
+        },
+        "meal_type": {
+          "type": "string",
+          "nullable": true
+        },
+        "item_name": {
+          "type": "string",
+          "nullable": true
+        },
+        "item_description": {
+          "type": "string",
+          "nullable": true
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "annotated_by": {
+          "type": "string"
+        },
+        "annotation_status": {
+          "type": "string",
+          "enum": [
+            "AUTO_ANNOTATED",
+            "REVIEW_NEEDED",
+            "CONFIRMED"
+          ]
+        }
+      },
+      "required": [
+        "annotated_by",
+        "annotation_status",
+        "confidence"
+      ]
+    },
+    "MerchantRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "merchant_raw": {
+          "type": "string"
+        },
+        "merchant_normalized": {
+          "type": "string"
+        },
+        "annotation": {
+          "$ref": "#/$defs/TransactionAnnotation"
+        },
+        "user_confirmed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "merchant_raw",
+        "annotation",
+        "user_confirmed"
+      ]
+    },
+    "SemanticEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "attachment_ref": {
+          "type": "string"
+        },
+        "matched_transaction_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ]
+    },
+    "FinancialSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_commit_threshold": {
+          "type": "number",
+          "minimum": 0.95,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "auto_commit_threshold"
+      ]
     }
   },
   "inputs": {
@@ -1518,6 +1780,14 @@
     "forfeit_deposit": "ClaimSettlement",
     "create_receivable": "ClaimInput",
     "settle_receivable": "ClaimSettlement",
-    "cancel_receivable": "ClaimSettlement"
+    "cancel_receivable": "ClaimSettlement",
+    "annotate_transaction": "TransactionAnnotation",
+    "review_financial_match": "FinancialReview",
+    "capture_financial_event": "RawFinancialInput",
+    "create_merchant_rule": "MerchantRule",
+    "update_merchant_rule": "MerchantRule",
+    "create_purchase_from_transaction": "PurchaseInput",
+    "attach_semantic_evidence": "SemanticEvidence",
+    "set_financial_settings": "FinancialSettings"
   }
 }

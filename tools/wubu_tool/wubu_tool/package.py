@@ -11,6 +11,7 @@ from .event_tools import RecordPurchaseTool, ValidatePurchaseTool, InventoryEven
 from .reality_tools import create_reality_tools
 
 Operation = Literal[
+ 'find_transactions_near_time', 'get_unannotated_transactions', 'annotate_transaction', 'get_financial_inbox', 'get_raw_financial_events', 'review_financial_match', 'get_account_reconciliation', 'capture_financial_event', 'create_merchant_rule', 'update_merchant_rule', 'create_purchase_from_transaction', 'attach_semantic_evidence', 'get_semantic_evidence', 'get_merchant_rules', 'get_financial_settings', 'set_financial_settings',
     'create_residence', 'update_residence', 'get_residences', 'link_residence_cost', 'get_residence_cost', 'get_relocation_cost', 'get_residence_durables', 'record_deposit', 'return_deposit', 'forfeit_deposit', 'get_deposits', 'create_receivable', 'settle_receivable', 'cancel_receivable', 'get_receivables', 'get_consumption_forecast', 'get_items_running_low',
     'create_planned_cashflow', 'update_planned_cashflow', 'cancel_planned_cashflow', 'skip_planned_cashflow', 'complete_planned_cashflow', 'get_upcoming_cashflows', 'get_living_runway', 'get_runway_settings', 'set_runway_settings', 'get_spending_by_nature', 'update_expense_nature',
     "top_up_account", "record_bonus", "update_account", "get_account_statistics", "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
@@ -25,6 +26,8 @@ Operation = Literal[
 class WubuInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation: Operation
+    raw_event_id: str | None = None
+    rule_id: str | None = None
     residence_id: str | None = None
     claim_id: str | None = None
     cashflow_id: str | None = None
@@ -39,7 +42,7 @@ class WubuInput(BaseModel):
     @model_validator(mode="after")
     def validate_operation(self):
         method, path = ROUTES[self.operation]
-        for field in ("residence_id", "claim_id", "cashflow_id", "transaction_id"):
+        for field in ("raw_event_id", "rule_id", "residence_id", "claim_id", "cashflow_id", "transaction_id"):
             if "{" + field + "}" in path and not getattr(self, field):
                 raise ValueError(field + " required")
         if "{item_id}" in path and not self.item_id:
@@ -70,6 +73,7 @@ class WubuTool(Tool):
     group = "wubu"
     input_model = WubuInput
     description = (
+        "v0.4：图片或描述先按时间查询候选（默认±30分钟，优先图片EXIF、上传或聊天时间）；多候选不得猜，无候选用 attach_semantic_evidence，不能凭图片捏造消费。补语义只用 annotate_transaction；后补购买用 create_purchase_from_transaction 复用支出。长期商家规则须用户确认。"
         "物簿记录钱与物：买、用、调、开、完、修、查。购买只调用一次 record_purchase_event，"
         "不要拆成库存和账目 CRUD。写入必须有稳定 idempotency_key，超时保留原键与参数重试。"
         "常用购买优先独立 record_purchase 工具，自动匹配或创建；按名称消耗等优先 wubu_inventory_event。其他需要 ID 的操作可 resolve_item；同名耐用品不能猜。"
@@ -101,7 +105,7 @@ class WubuTool(Tool):
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "0.3.0"
+    package_version = "0.4.0"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)

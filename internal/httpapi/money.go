@@ -28,7 +28,9 @@ func writeLedger[T any](a *API, status int, fn func(*http.Request, T) (any, bool
 	}
 }
 func (a *API) registerMoney(m *http.ServeMux) {
+	a.registerStatements(m)
 	a.registerRunway(m)
+	a.registerFinancial(m)
 	m.HandleFunc("GET /api/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		f := ledger.AccountFilter{AccountClass: q.Get("account_class"), Merchant: q.Get("merchant")}

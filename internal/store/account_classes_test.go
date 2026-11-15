@@ -326,7 +326,7 @@ func TestV021MigrationPreservesV02AndRestart(t *testing.T) {
 		var version, foreign int
 		upgraded.db.QueryRow(`PRAGMA user_version`).Scan(&version)
 		upgraded.db.QueryRow(`PRAGMA foreign_keys`).Scan(&foreign)
-		if version != 12 || foreign != 1 {
+		if version != 14 || foreign != 1 {
 			t.Fatal(version, foreign)
 		}
 		reconcileAll(t, upgraded)

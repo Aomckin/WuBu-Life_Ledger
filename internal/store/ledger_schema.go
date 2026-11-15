@@ -30,8 +30,7 @@ func (s *Store) migrateLedger(ctx context.Context) error {
 	if err := s.migrateLiving(ctx); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `PRAGMA user_version=12`)
-	return err
+	return s.migrateFinancial(ctx)
 }
 
 const ledgerSchema = `

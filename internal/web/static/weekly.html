@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>物簿 · 每周同步</title><link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/app.css"><link rel="stylesheet" href="/assets/ledger.css"><link rel="stylesheet" href="/assets/weekly.css"><script src="/assets/weekly.js" defer></script></head>
+<body><header class="topbar"><a class="brand" href="/">物簿 · 每周同步</a><a href="/financial-inbox">财务收件箱</a><a href="/">返回账簿</a></header>
+<main class="page-shell"><section class="hero"><div><p class="eyebrow">让账簿重新对齐现实</p><h1>原生账单直接放进来。</h1><p>微信、支付宝分别上传，银行先选模板。先预览和确认账户，再补漏、补语义、核对余额。</p></div><button id="sync-new" class="button">开始新一轮同步</button></section>
+<p id="sync-message" role="status" aria-live="polite"></p><section id="sync-forms" class="sync-grid" aria-label="原生账单导入"></section>
+<section class="ledger-panel"><h2>本轮同步汇总</h2><div id="sync-summary" aria-live="polite"></div><p><a href="/financial-inbox">处理待确认记录</a> · <a href="/financial-inbox?tab=unannotated">查看未补全语义</a></p></section>
+<section class="ledger-panel"><h2>最后核对真实余额</h2><p>余额先对齐，暂时解释不清的差额会保留。后续补到历史流水时不会再加减一次余额。</p><div id="sync-health"></div></section>
+<section class="ledger-panel"><h2>同步历史</h2><div id="sync-history"></div><div class="ledger-actions"><button id="history-newer" class="button">较新记录</button><button id="history-older" class="button">更早记录</button></div></section>
+</main>
+<dialog id="sync-balance-dialog"><form id="sync-balance-form"><h2 id="sync-balance-title">核对余额</h2><input name="account_id" type="hidden"><label>当前账面余额<input name="expected" readonly></label><label>实际余额（元）<input name="actual_balance" type="number" step="0.01" required></label><label>说明<input name="reason" value="每周账单同步后的余额核对" required maxlength="2000"></label><p id="sync-balance-error" role="alert"></p><button type="submit" class="button button-primary">确认真实余额</button><button type="button" id="sync-balance-cancel" class="button">取消</button></form></dialog>
+</body></html>

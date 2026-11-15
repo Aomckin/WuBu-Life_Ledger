@@ -1,0 +1,129 @@
+package analyser
+
+import (
+	"fmt"
+
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/abc_debit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/alipay"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/bmo"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/boc"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/bocom_credit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/bocom_debit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/ccb"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/cgb_credit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/cib_debit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/citic"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/cmb"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/hsbchk"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/htsec"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/huobi"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/hxsec"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/ibkr"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/icbc"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/jd"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/mt"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/oklink"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/spdb_debit"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/td"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/analyser/wechat"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/config"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/consts"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/importer"
+	"github.com/deb-sig/double-entry-generator/v2/pkg/ir"
+)
+
+// Interface is the interface of analyser.
+type Interface interface {
+	GetAllCandidateAccounts(cfg *config.Config) map[string]bool
+	GetAccountsAndTags(o *ir.Order, cfg *config.Config, target, provider string) (bool, string, string, map[ir.Account]string, []string)
+}
+
+// New creates a new analyser.
+func New(providerName string) (Interface, error) {
+	switch providerName {
+	case importer.DefaultProviderName:
+		return Runtime{}, nil
+	case consts.ProviderAlipay:
+		return alipay.Alipay{}, nil
+	case consts.ProviderWechat:
+		return wechat.Wechat{}, nil
+	case consts.ProviderHuobi:
+		return huobi.Huobi{}, nil
+	case consts.ProviderHtsec:
+		return htsec.Htsec{}, nil
+	case consts.ProviderIcbc:
+		return icbc.Icbc{}, nil
+	case consts.ProviderTd:
+		return td.Td{}, nil
+	case consts.ProviderBmo:
+		return bmo.Bmo{}, nil
+	case consts.ProviderBocomCredit:
+		return bocom_credit.BocomCredit{}, nil
+	case consts.ProviderCgbCredit:
+		return cgb_credit.CgbCredit{}, nil
+	case consts.ProviderBocomDebit:
+		return bocom_debit.BocomDebit{}, nil
+	case consts.ProviderJD:
+		return jd.JD{}, nil
+	case consts.ProviderCitic:
+		return citic.Citic{}, nil
+	case consts.ProviderHsbcHK:
+		return hsbchk.HsbcHK{}, nil
+	case consts.ProviderMT:
+		return mt.MT{}, nil
+	case consts.ProviderHxsec:
+		return hxsec.Hxsec{}, nil
+	case consts.ProviderCCB:
+		return ccb.CCB{}, nil
+	case consts.ProviderCmb:
+		return cmb.Cmb{}, nil
+	case consts.ProviderOKLink:
+		return oklink.OKLink{}, nil
+	case consts.ProviderAbcDebit:
+		return abc_debit.AbcDebit{}, nil
+	case consts.ProviderSpdbDebit:
+		return spdb_debit.SpdbDebit{}, nil
+	case consts.ProviderCibDebit:
+		return cib_debit.CibDebit{}, nil
+	case consts.ProviderBoc:
+		return boc.Boc{}, nil
+	case consts.ProviderIbkr:
+		return ibkr.Ibkr{}, nil
+	default:
+		return nil, fmt.Errorf("Fail to create the analyser for the given name %s", providerName)
+	}
+}
+
+// Runtime is the analyser used by template-driven imports. Accounts and tags
+// are already produced by the rule engine, so this analyser only fills defaults.
+type Runtime struct{}
+
+func (Runtime) GetAllCandidateAccounts(cfg *config.Config) map[string]bool {
+	accounts := map[string]bool{}
+	for _, account := range []string{
+		cfg.DefaultMinusAccount,
+		cfg.DefaultPlusAccount,
+		cfg.DefaultCashAccount,
+		cfg.DefaultPositionAccount,
+		cfg.DefaultCommissionAccount,
+		cfg.DefaultPnlAccount,
+		cfg.DefaultThirdPartyCustodyAccount,
+	} {
+		if account != "" {
+			accounts[account] = true
+		}
+	}
+	return accounts
+}
+
+func (Runtime) GetAccountsAndTags(o *ir.Order, cfg *config.Config, target, provider string) (bool, string, string, map[ir.Account]string, []string) {
+	minus := o.MinusAccount
+	if minus == "" {
+		minus = cfg.DefaultMinusAccount
+	}
+	plus := o.PlusAccount
+	if plus == "" {
+		plus = cfg.DefaultPlusAccount
+	}
+	return false, minus, plus, o.ExtraAccounts, o.Tags
+}

@@ -69,8 +69,21 @@ func (s *Store) ledgerTx(ctx context.Context, key, operation string, request any
 }
 
 func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.PurchaseInput) (ledger.Purchase, bool, error) {
+	return s.recordPurchase(ctx, key, "", input)
+}
+func (s *Store) CreatePurchaseFromTransaction(ctx context.Context, key, id string, input ledger.PurchaseInput) (ledger.Purchase, bool, error) {
+	if id == "" {
+		return ledger.Purchase{}, false, ledger.ErrInvalid
+	}
+	return s.recordPurchase(ctx, key, id, input)
+}
+func (s *Store) recordPurchase(ctx context.Context, key, transactionID string, input ledger.PurchaseInput) (ledger.Purchase, bool, error) {
 	var out ledger.Purchase
-	replay, err := s.ledgerTx(ctx, key, "record_purchase_event", input, &out, func(tx *sql.Tx) error {
+	operation := "record_purchase_event"
+	if transactionID != "" {
+		operation += ":" + transactionID
+	}
+	replay, err := s.ledgerTx(ctx, key, operation, input, &out, func(tx *sql.Tx) error {
 		p, e := ledger.ValidatePurchase(input)
 		if e != nil {
 			return e
@@ -110,8 +123,22 @@ func (s *Store) RecordPurchase(ctx context.Context, key string, input ledger.Pur
 		if e != nil {
 			return e
 		}
-		if _, e = purchasePayment(ctx, tx, &out); e != nil {
-			return e
+		if transactionID == "" {
+			if _, e = purchasePayment(ctx, tx, &out); e != nil {
+				return e
+			}
+		} else {
+			original, e := scanMoney(tx.QueryRowContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE id=?`, transactionID))
+			if e != nil {
+				return e
+			}
+			if original.Type != "EXPENSE" || original.VoidedAt != "" || original.PurchaseEventID != "" || original.Amount != p.TotalAmount || original.AccountID != p.AccountID {
+				return ledger.ErrConflict
+			}
+			if _, e = tx.ExecContext(ctx, `UPDATE money_transactions SET purchase_event_id=? WHERE id=?`, out.ID, original.ID); e != nil {
+				return e
+			}
+			out.Status = "COMPLETED"
 		}
 		for i := range out.Items {
 			if e = insertPurchaseLine(ctx, tx, &out, &out.Items[i], now); e != nil {

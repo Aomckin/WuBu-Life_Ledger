@@ -4,6 +4,7 @@ FROM golang:1.25-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
+COPY third_party/double-entry-generator/ ./third_party/double-entry-generator/
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .

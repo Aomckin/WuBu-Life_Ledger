@@ -53,6 +53,8 @@ ROUTES.update({'create_planned_cashflow': ('POST', '/planned-cashflows'), 'updat
 ROUTES.update({'create_residence': ('POST', '/residences'), 'update_residence': ('PUT', '/residences/{residence_id}'), 'get_residences': ('GET', '/residences'), 'link_residence_cost': ('POST', '/residences/{residence_id}/cost-links'), 'get_residence_cost': ('GET', '/residences/{residence_id}/cost'), 'get_relocation_cost': ('GET', '/residences/{residence_id}/relocation-cost'), 'get_residence_durables': ('GET', '/residences/{residence_id}/durables'), 'record_deposit': ('POST', '/deposits'), 'return_deposit': ('POST', '/deposits/{claim_id}/return'), 'forfeit_deposit': ('POST', '/deposits/{claim_id}/forfeit'), 'get_deposits': ('GET', '/deposits'), 'create_receivable': ('POST', '/receivables'), 'settle_receivable': ('POST', '/receivables/{claim_id}/return'), 'cancel_receivable': ('POST', '/receivables/{claim_id}/forfeit'), 'get_receivables': ('GET', '/receivables'), 'get_consumption_forecast': ('GET', '/items/{item_id}/consumption-forecast'), 'get_items_running_low': ('GET', '/items-running-low')})
 ROUTES.update({action+"_by_name": ("POST", "/items/"+action) for action in ("consume", "adjust", "open", "finish", "discard")})
 
+ROUTES.update({'find_transactions_near_time': ('GET', '/financial/transactions'), 'get_unannotated_transactions': ('GET', '/financial/transactions'), 'annotate_transaction': ('PUT', '/financial/transactions/{transaction_id}/annotation'), 'get_financial_inbox': ('GET', '/financial/inbox'), 'get_raw_financial_events': ('GET', '/financial/events'), 'review_financial_match': ('POST', '/financial/events/{raw_event_id}/review'), 'get_account_reconciliation': ('GET', '/financial/reconciliation'), 'capture_financial_event': ('POST', '/financial/events'), 'create_merchant_rule': ('POST', '/financial/merchant-rules'), 'update_merchant_rule': ('PUT', '/financial/merchant-rules/{rule_id}'), 'create_purchase_from_transaction': ('POST', '/financial/transactions/{transaction_id}/purchase'), 'attach_semantic_evidence': ('POST', '/financial/semantic-evidence'), 'get_semantic_evidence': ('GET', '/financial/semantic-evidence'), 'get_merchant_rules': ('GET', '/financial/merchant-rules'), 'get_financial_settings': ('GET', '/financial/settings'), 'set_financial_settings': ('PATCH', '/financial/settings')})
+
 class WubuError(Exception):
     def __init__(self, message, code="network_error", unknown_outcome=False, detail=None):
         super().__init__(message)
@@ -70,11 +72,13 @@ class WubuClient:
         self.base_url = base_url.rstrip("/") + "/api/v1"
         self.timeout = float(timeout)
 
-    def call(self, operation, *, item_id=None, purchase_id=None, account_id=None, cashflow_id=None, transaction_id=None, residence_id=None, claim_id=None, payload=None, query=None, idempotency_key=None):
+    def call(self, operation, *, raw_event_id=None, rule_id=None, item_id=None, purchase_id=None, account_id=None, cashflow_id=None, transaction_id=None, residence_id=None, claim_id=None, payload=None, query=None, idempotency_key=None):
         if operation not in ROUTES:
             raise ValueError("unsupported operation")
         method, path = ROUTES[operation]
-        for name, value in [("residence_id", residence_id), ("claim_id", claim_id), ("cashflow_id", cashflow_id), ("transaction_id", transaction_id), ("item_id", item_id), ("purchase_id", purchase_id), ("account_id", account_id)]:
+        if operation == "get_unannotated_transactions":
+            query = {**(query or {}), "unannotated_only": True}
+        for name, value in [("raw_event_id",raw_event_id),("rule_id",rule_id),("residence_id", residence_id), ("claim_id", claim_id), ("cashflow_id", cashflow_id), ("transaction_id", transaction_id), ("item_id", item_id), ("purchase_id", purchase_id), ("account_id", account_id)]:
             if "{" + name + "}" in path:
                 if not value:
                     raise ValueError(name + " required")

@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -306,6 +308,10 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 		return out, e
 	}
 	_, e = tx.ExecContext(ctx, `UPDATE accounts SET balance_cents=?,updated_at=? WHERE id=?`, out.BalanceAfter, now, a.ID)
+	if e != nil {
+		return out, e
+	}
+	e = compensateCheckpoint(ctx, tx, out)
 	return out, e
 }
 func paymentAccountTx(ctx context.Context, tx *sql.Tx, id, method string) (ledger.Account, error) {
@@ -422,9 +428,34 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 					return fmt.Errorf("%w: refund exceeds remaining expense", ledger.ErrConflict)
 				}
 			}
+			var evidence *ledger.RawFinancialEvent
+			if kind == "EXPENSE" || kind == "INCOME" || kind == "REFUND" {
+				payload, e := json.Marshal(p)
+				if e != nil {
+					return e
+				}
+				capture := "MANUAL"
+				if p.Source == "agent" {
+					capture = "AGENT"
+				} else if p.Source == "system" {
+					capture = "SYSTEM"
+				} else if p.Source == "import" {
+					capture = "CSV_IMPORT"
+				}
+				raw := ledger.RawFinancialEvent{ID: uuid.NewString(), Status: "NORMALIZED", Decision: "EXPLICIT_MONEY_EVENT", Fingerprint: fmt.Sprintf("%x", sha256.Sum256(payload)), Candidates: []string{}, Confidence: 1, RawFinancialInput: ledger.RawFinancialInput{Provider: "OTHER", CaptureSource: capture, ExternalID: p.ExternalID, Amount: &p.Amount, Direction: kind, OccurredAt: p.OccurredAt, CapturedAt: financialNow(), AccountID: p.AccountID, MerchantRaw: p.Merchant, RawText: p.Note, RawPayload: string(payload)}}
+				if e = saveRawTx(ctx, tx, raw); e != nil {
+					return e
+				}
+				evidence = &raw
+			}
 			t, e := postMoney(ctx, tx, kind, p, "", delta)
 			if e != nil {
 				return e
+			}
+			if evidence != nil {
+				if e = linkRawTx(ctx, tx, evidence, t.ID, "PRIMARY"); e != nil {
+					return e
+				}
 			}
 			if kind == "REFUND" {
 				if e = returnStock(ctx, tx, t, p.ReturnItems); e != nil {
@@ -434,6 +465,17 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 					if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET updated_at=? WHERE id=?`, nextPurchaseVersion(t.CreatedAt), t.PurchaseEventID); e != nil {
 						return e
 					}
+				}
+			}
+			if kind == "ADJUSTMENT" {
+				var unresolved ledger.SignedMoney
+				e = tx.QueryRowContext(ctx, `SELECT unexplained_cents FROM balance_checkpoints WHERE account_id=? ORDER BY julianday(observed_at) DESC,rowid DESC LIMIT 1`, t.AccountID).Scan(&unresolved)
+				if e != nil && !errors.Is(e, sql.ErrNoRows) {
+					return e
+				}
+				_, e = tx.ExecContext(ctx, `INSERT INTO balance_checkpoints VALUES(?,?,?,?,?,?,?)`, uuid.NewString(), t.AccountID, t.BalanceAfter, t.BalanceBefore, t.BalanceDelta, unresolved+t.BalanceDelta, t.OccurredAt)
+				if e != nil {
+					return e
 				}
 			}
 			out.Transactions = append(out.Transactions, t)

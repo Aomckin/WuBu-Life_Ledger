@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Personal money and item lifecycle database based on Stockroom. One purchase transaction updates money, items, stock and history. CNY only. Bind to loopback by default. Optional AI Intake changes inventory only; use purchases to record expenses."
   },
   "servers": [
@@ -6176,7 +6176,36 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MoneyImportResult"
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "imported": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "skipped_rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MoneyImportSkipped"
+                      }
+                    },
+                    "transactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -6204,7 +6233,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "Read only CSV parsing and dedup preview. No implicit inventory/purchase creation; ambiguous transfers/refunds require explicit account/link in generic CSV.",
+        "description": "Runs the same reconciliation as import inside a rolled-back transaction. Imported, duplicate and review counts describe the current snapshot; no generated IDs or state are persisted. Legacy compatibility only; the product uses explicit native statement endpoints.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6214,7 +6243,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/v1/money/import": {
@@ -6242,7 +6272,36 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MoneyImportResult"
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "imported": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "skipped_rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MoneyImportSkipped"
+                      }
+                    },
+                    "transactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -6270,7 +6329,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "All rows commit atomically. source/account/external_id dedup; fallback hash account/type/time/amount/merchant. At most 500 rows per batch.",
+        "description": "WeChat unresolved refunds/returned payments and neutral movements are excluded with source row and reason in skipped_rows; inspect preview before commit. Generic invalid rows still fail atomically. Legacy compatibility only; the product uses explicit native statement endpoints.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6280,7 +6339,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/v1/money/top-ups": {
@@ -7799,6 +7859,737 @@
           },
           "422": {
             "description": "Domain validation error"
+          }
+        }
+      }
+    },
+    "/api/v1/financial/transactions": {
+      "get": {
+        "operationId": "get_unannotated_transactions",
+        "summary": "get_unannotated_transactions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "occurred_at",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window_minutes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 43200
+            }
+          },
+          {
+            "name": "unannotated_only",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "merchant",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "amount",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "annotation_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "When occurred_at is provided, match_status is NO_MATCH, CANDIDATE_FOUND or REVIEW_NEEDED. Ambiguity is evaluated independently of requested pagination. A single candidate is not automatic authorization to annotate or create money."
+      }
+    },
+    "/api/v1/financial/transactions/{id}/annotation": {
+      "put": {
+        "operationId": "annotate_transaction",
+        "summary": "annotate_transaction",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionAnnotation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/inbox": {
+      "get": {
+        "operationId": "get_financial_inbox",
+        "summary": "get_financial_inbox",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/financial/events": {
+      "get": {
+        "operationId": "get_raw_financial_events",
+        "summary": "get_raw_financial_events",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      },
+      "post": {
+        "operationId": "capture_financial_event",
+        "summary": "capture_financial_event",
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawFinancialInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/events/{id}/review": {
+      "post": {
+        "operationId": "review_financial_match",
+        "summary": "review_financial_match",
+        "responses": {
+          "200": {
+            "description": "Reviewed evidence; raw text unchanged"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinancialReview"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/reconciliation": {
+      "get": {
+        "operationId": "get_account_reconciliation",
+        "summary": "get_account_reconciliation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/financial/merchant-rules": {
+      "post": {
+        "operationId": "create_merchant_rule",
+        "summary": "create_merchant_rule",
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MerchantRule"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_merchant_rules",
+        "summary": "get_merchant_rules",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/financial/merchant-rules/{id}": {
+      "put": {
+        "operationId": "update_merchant_rule",
+        "summary": "update_merchant_rule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MerchantRule"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/transactions/{id}/purchase": {
+      "post": {
+        "operationId": "create_purchase_from_transaction",
+        "summary": "create_purchase_from_transaction",
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/semantic-evidence": {
+      "post": {
+        "operationId": "attach_semantic_evidence",
+        "summary": "attach_semantic_evidence",
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticEvidence"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_semantic_evidence",
+        "summary": "get_semantic_evidence",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/financial/settings": {
+      "get": {
+        "operationId": "get_financial_settings",
+        "summary": "get_financial_settings",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": []
+      },
+      "patch": {
+        "operationId": "set_financial_settings",
+        "summary": "set_financial_settings",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinancialSettings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/{provider}/preview": {
+      "post": {
+        "operationId": "statement_preview",
+        "summary": "Preview native statement without writes",
+        "description": "Native file limit 5 MiB and 2000 records. Preview tokens bind the complete request and ledger revision; a changed ledger returns 409. Commit retries retain the same key, token and payload. Bad rows remain reviewable evidence. Original bytes are retained with the import batch.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "wechat",
+                "alipay",
+                "abc_debit",
+                "bmo",
+                "boc",
+                "bocom_credit",
+                "bocom_debit",
+                "ccb",
+                "cgb_credit",
+                "cib_debit",
+                "citic",
+                "cmb",
+                "hsbchk",
+                "icbc",
+                "spdb_debit",
+                "td"
+              ]
+            },
+            "description": "Explicit payment provider or bank statement template. No arbitrary CSV detection."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatementInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale preview or idempotency conflict"
+          },
+          "422": {
+            "description": "Wrong provider, invalid file or missing preview"
+          }
+        }
+      }
+    },
+    "/api/v1/statements/{provider}/commit": {
+      "post": {
+        "operationId": "statement_commit",
+        "summary": "Commit the confirmed native statement atomically",
+        "description": "Native file limit 5 MiB and 2000 records. Preview tokens bind the complete request and ledger revision; a changed ledger returns 409. Commit retries retain the same key, token and payload. Bad rows remain reviewable evidence. Original bytes are retained with the import batch.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "wechat",
+                "alipay",
+                "abc_debit",
+                "bmo",
+                "boc",
+                "bocom_credit",
+                "bocom_debit",
+                "ccb",
+                "cgb_credit",
+                "cib_debit",
+                "citic",
+                "cmb",
+                "hsbchk",
+                "icbc",
+                "spdb_debit",
+                "td"
+              ]
+            },
+            "description": "Explicit payment provider or bank statement template. No arbitrary CSV detection."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatementCommitInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale preview or idempotency conflict"
+          },
+          "422": {
+            "description": "Wrong provider, invalid file or missing preview"
+          }
+        }
+      }
+    },
+    "/api/v1/statements/templates": {
+      "get": {
+        "operationId": "statement_templates",
+        "summary": "Explicit native payment and bank template registry",
+        "responses": {
+          "200": {
+            "description": "Template registry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StatementTemplate"
+                      }
+                    },
+                    "parser_version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/batches": {
+      "get": {
+        "operationId": "statement_batches",
+        "summary": "Native import history",
+        "parameters": [
+          {
+            "name": "sync_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Import batches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ImportBatch"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/summary": {
+      "get": {
+        "operationId": "statement_summary",
+        "summary": "Weekly sync totals, current pending review and account reconciliation health",
+        "parameters": [
+          {
+            "name": "sync_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/batches/{id}/file": {
+      "get": {
+        "operationId": "statement_original_file",
+        "summary": "Download unchanged original statement bytes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original attachment",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Batch not found"
           }
         }
       }
@@ -12134,6 +12925,14 @@
             "items": {
               "$ref": "#/components/schemas/ReturnItem"
             }
+          },
+          "raw_record": {
+            "type": "string",
+            "description": "Complete original CSV record, including quoted multiline fields."
+          },
+          "raw_payload": {
+            "type": "string",
+            "description": "JSON object containing original header and parsed field values."
           }
         },
         "required": [
@@ -12164,6 +12963,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MoneyTransaction"
+            }
+          },
+          "needs_review": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "raw_events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RawFinancialEvent"
+            }
+          },
+          "skipped_rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyImportSkipped"
             }
           }
         },
@@ -12968,6 +13783,760 @@
             ]
           }
         }
+      },
+      "MoneyImportSkipped": {
+        "type": "object",
+        "properties": {
+          "row": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "reason"
+        ]
+      },
+      "RawFinancialInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider_code": {
+            "type": "string"
+          },
+          "description_raw": {
+            "type": "string"
+          },
+          "payment_method_raw": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "review_reason": {
+            "type": "string"
+          },
+          "time_precision": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAY",
+              "SECOND"
+            ]
+          },
+          "related_transaction_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "WECHAT",
+              "ALIPAY",
+              "BANK",
+              "UNIONPAY",
+              "CASH",
+              "OTHER"
+            ]
+          },
+          "capture_source": {
+            "type": "string",
+            "enum": [
+              "CSV_IMPORT",
+              "MANUAL",
+              "AGENT",
+              "SYSTEM"
+            ]
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "captured_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "direction": {
+            "type": "string"
+          },
+          "merchant_raw": {
+            "type": "string"
+          },
+          "payment_channel": {
+            "type": "string"
+          },
+          "funding_hint": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "raw_title": {
+            "type": "string"
+          },
+          "raw_text": {
+            "type": "string"
+          },
+          "raw_payload": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "capture_source",
+          "raw_text"
+        ]
+      },
+      "FinancialReview": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "description": "EXPENSE, INCOME, REFUND, or TRANSFER_IN/TRANSFER_OUT for MATCH only; transfer legs are never created independently."
+          },
+          "related_transaction_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "MATCH",
+              "CREATE_NEW",
+              "IGNORE"
+            ]
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ]
+      },
+      "TransactionAnnotation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "expense_nature": {
+            "type": "string",
+            "nullable": true
+          },
+          "meal_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "item_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "item_description": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "annotated_by": {
+            "type": "string"
+          },
+          "annotation_status": {
+            "type": "string",
+            "enum": [
+              "AUTO_ANNOTATED",
+              "REVIEW_NEEDED",
+              "CONFIRMED"
+            ]
+          }
+        },
+        "required": [
+          "annotated_by",
+          "annotation_status",
+          "confidence"
+        ]
+      },
+      "BalanceCheckpoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "observed_balance": {
+            "type": "number"
+          },
+          "expected_balance": {
+            "type": "number"
+          },
+          "difference": {
+            "type": "number"
+          },
+          "unexplained_amount": {
+            "type": "number"
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        }
+      },
+      "FinancialSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "auto_commit_threshold": {
+            "type": "number",
+            "minimum": 0.95,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "auto_commit_threshold"
+        ]
+      },
+      "SemanticEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "attachment_ref": {
+            "type": "string"
+          },
+          "matched_transaction_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "MerchantRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "merchant_raw": {
+            "type": "string"
+          },
+          "merchant_normalized": {
+            "type": "string"
+          },
+          "annotation": {
+            "$ref": "#/components/schemas/TransactionAnnotation"
+          },
+          "user_confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "merchant_raw",
+          "annotation",
+          "user_confirmed"
+        ]
+      },
+      "RawFinancialEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider_code": {
+            "type": "string"
+          },
+          "evidence_key": {
+            "type": "string",
+            "readOnly": true
+          },
+          "import_batch_id": {
+            "type": "string",
+            "readOnly": true
+          },
+          "row_number": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "description_raw": {
+            "type": "string"
+          },
+          "payment_method_raw": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "review_reason": {
+            "type": "string"
+          },
+          "time_precision": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAY",
+              "SECOND"
+            ]
+          },
+          "related_transaction_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "WECHAT",
+              "ALIPAY",
+              "BANK",
+              "UNIONPAY",
+              "CASH",
+              "OTHER"
+            ]
+          },
+          "capture_source": {
+            "type": "string",
+            "enum": [
+              "CSV_IMPORT",
+              "MANUAL",
+              "AGENT",
+              "SYSTEM"
+            ]
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "captured_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "direction": {
+            "type": "string"
+          },
+          "merchant_raw": {
+            "type": "string"
+          },
+          "payment_channel": {
+            "type": "string"
+          },
+          "funding_hint": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "raw_title": {
+            "type": "string"
+          },
+          "raw_text": {
+            "type": "string"
+          },
+          "raw_payload": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "StatementInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "file_base64": {
+            "type": "string",
+            "format": "byte",
+            "description": "Original native file bytes encoded as base64."
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "payment_accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "sync_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "preview_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "file_base64"
+        ]
+      },
+      "ImportBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider_code": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "file_hash": {
+            "type": "string"
+          },
+          "imported_at": {
+            "type": "string"
+          },
+          "sync_id": {
+            "type": "string"
+          },
+          "parser_version": {
+            "type": "string"
+          },
+          "row_count": {
+            "type": "integer"
+          },
+          "new_transactions": {
+            "type": "integer"
+          },
+          "matched_existing": {
+            "type": "integer"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "conflicts": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "unannotated": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "provider_code",
+          "filename",
+          "file_hash",
+          "imported_at",
+          "sync_id",
+          "parser_version",
+          "row_count",
+          "new_transactions",
+          "matched_existing",
+          "duplicates",
+          "conflicts",
+          "skipped",
+          "unannotated"
+        ]
+      },
+      "StatementRowResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "row": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Yuan, exactly two decimal places; stored as integer cents.",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "payment_method": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "time_precision": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "raw_event_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "amount",
+          "currency",
+          "merchant",
+          "payment_method",
+          "account_id",
+          "occurred_at",
+          "time_precision",
+          "direction",
+          "status",
+          "reason",
+          "transaction_id",
+          "raw_event_id"
+        ]
+      },
+      "StatementResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "batch": {
+            "$ref": "#/components/schemas/ImportBatch"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatementRowResult"
+            }
+          },
+          "preview_token": {
+            "type": "string"
+          },
+          "already_imported": {
+            "type": "boolean"
+          },
+          "previous_batch_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch",
+          "rows",
+          "preview_token",
+          "already_imported",
+          "previous_batch_id"
+        ]
+      },
+      "StatementSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pending_review": {
+            "type": "integer"
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportBatch"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ImportBatch"
+          },
+          "account_health": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountHealth"
+            }
+          }
+        },
+        "required": [
+          "pending_review",
+          "batches",
+          "totals",
+          "account_health"
+        ]
+      },
+      "AccountHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "current_balance": {
+            "type": "number",
+            "description": "Yuan, exactly two decimal places; stored as integer cents."
+          },
+          "unexplained_amount": {
+            "type": "number",
+            "description": "Yuan, exactly two decimal places; stored as integer cents."
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "name",
+          "current_balance",
+          "unexplained_amount",
+          "observed_at",
+          "status"
+        ]
+      },
+      "StatementCommitInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "file_base64": {
+            "type": "string",
+            "format": "byte",
+            "description": "Original native file bytes encoded as base64."
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "payment_accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "sync_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "preview_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "file_base64",
+          "preview_token"
+        ]
+      },
+      "StatementTemplate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "payment",
+              "bank"
+            ]
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "group",
+          "extensions"
+        ]
       }
     }
   }

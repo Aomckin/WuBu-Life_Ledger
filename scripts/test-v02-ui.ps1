@@ -1,4 +1,4 @@
-param([string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '', [ValidatePattern('^[a-z0-9-]+$')][string]$ScreenshotPrefix = 'v02')
+param([ValidateSet('test-v02-ui.cjs','test-v04-ui.cjs','test-v04-weekly-ui.cjs')][string]$BrowserTest = 'test-v02-ui.cjs', [string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '', [ValidatePattern('^[a-z0-9-]+$')][string]$ScreenshotPrefix = 'v02')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $projectRoot
@@ -35,7 +35,7 @@ try {
         catch { Start-Sleep -Milliseconds 100 }
     }
     if (-not $ready) { Get-Content (Join-Path $testDirectory 'stderr.log'); throw 'UI service unavailable' }
-    node scripts/test-v02-ui.cjs
+    node (Join-Path $PSScriptRoot $BrowserTest)
     if ($LASTEXITCODE -ne 0) { throw 'UI acceptance failed' }
     if ($ScreenshotDirectory) {
         New-Item -ItemType Directory -Path $ScreenshotDirectory -Force | Out-Null

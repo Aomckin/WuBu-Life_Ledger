@@ -1,4 +1,4 @@
-# 物簿朝汐工具包 v0.2.1
+# 物簿朝汐工具包 v0.4
 
 独立的朝汐 SDK v1 ToolPackage，开发和测试均在物簿目录。朝汐项目保持只读，因此本次不安装或激活工具。
 
@@ -44,3 +44,11 @@ top_up_account(from_account="微信", to_account="茶颜会员", paid_amount=100
 居住操作：create/update/get_residences、link_residence_cost、get_residence_cost、get_relocation_cost、get_residence_durables，使用 residence_id。押金 / 代垫：record_deposit、return_deposit、forfeit_deposit、get_deposits、create_receivable、settle_receivable、cancel_receivable、get_receivables，结算路径使用 claim_id。create_receivable 是本次真实代垫，会扣款；不要对已有支出再次创建。核销代表确认损失。
 
 `get_consumption_forecast` 使用 item_id，`get_items_running_low` 不需参数。耐用品 update_durable_details 支持 has_original_packaging、purchase_proof、estimated_resale_value、residence_id。凭证只保存本地引用，不自动上传。完整 payload 见嵌入 OpenAPI schema；所有写入继续携带稳定 idempotency_key。本轮未安装或启用到朝汐。
+
+## v0.4 语义后补
+
+`find_transactions_near_time` 默认查询 ±30 分钟候选，优先使用图片 EXIF、上传或聊天时间；`get_unannotated_transactions` 支持 period=today/week/month。金额、商家、账户、语义状态与分页放 query。多候选不得猜，无候选用 `attach_semantic_evidence` 保存证据，后续可携原 evidence id 关联已有流水；不凭图片捏造支出。
+
+`annotate_transaction` 不改金额或余额；可信的非空分类 / 性质会镜像到旧流水元数据，使既有统计可继续工作。`create_purchase_from_transaction` 携 transaction_id 复用原支出；payload 使用 PurchaseInput 并指定原账户和相同金额。`review_financial_match` 携 raw_event_id 和稳定幂等键；忽略必须写原因。TRANSFER_IN / TRANSFER_OUT 方向只可 MATCH 已有转账，不能创建孤立转账腿；请先用原高层 transfer_money 原子记录双方。商家规则须用户确认后才能创建。
+
+证据来源限 CSV_IMPORT、MANUAL、AGENT、SYSTEM。原生账单由物簿 `/weekly-sync` 调用固定 double-entry-generator Provider 解析，不经模型逐行处理。新增工具仍仅存于本仓库，朝汐未安装 / 激活。开发基准为 Weekly Reconciliation & Semantic Backfill；当前交付见仓库 docs/V0.4_DELIVERY.md。
