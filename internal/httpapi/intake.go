@@ -170,7 +170,7 @@ func (a *API) intakeSettings(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, settings)
+	writeJSON(w, http.StatusOK, map[string]bool{"auto_analyze": settings.AutoAnalyze, "ai_available": a.analyzer != nil})
 }
 
 func (a *API) getIntakeBatch(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +212,7 @@ func (a *API) updateIntakeSettings(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, settings)
+	writeJSON(w, http.StatusOK, map[string]bool{"auto_analyze": settings.AutoAnalyze, "ai_available": a.analyzer != nil})
 }
 
 func (a *API) getIntake(w http.ResponseWriter, r *http.Request) {

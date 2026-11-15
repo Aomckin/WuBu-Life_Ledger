@@ -20,13 +20,13 @@ async def main():
     after=(await call('get_expense_summary',{})).data;assert after['net_expense']==before['net_expense'] and after['income']==before['income']
     accounts=(await call('get_accounts',{'account_class':'CONSUMPTION','merchant':'茶颜悦色'})).data;assert any(x['id']==b['id'] for x in accounts['items'])
     await call('set_default_payment_account',{'default_payment_account':b['id'],'idempotency_key':'v021-default'})
-    buy=(await call('record_purchase',{'items':[{'name':'SDK v021 奶茶','quantity':1,'unit':'杯','price':20,'item_type':'UNTRACKED'}],'idempotency_key':'v021-buy'})).data
+    buy=(await call('record_expense',{'amount':20,'idempotency_key':'v021-buy'})).data['transactions'][0]
     stats=(await call('get_account_statistics',{'account_id':b['name']})).data
     assert stats['current_balance']==90 and stats['expense']==20 and stats['top_up_principal']==100 and stats['bonus']==10,stats
-    result=await tools['record_purchase'].run({'merchant':'麦当劳','items':[{'name':'饮品','quantity':1,'unit':'杯','price':20}],'idempotency_key':'v021-mismatch'})
+    result=await tools['record_expense'].run({'merchant':'麦当劳','amount':20,'idempotency_key':'v021-mismatch'})
     assert not result.success and result.data['error']['code']=='ACCOUNT_MERCHANT_MISMATCH',result
-    await call('record_refund',{'purchase_event_id':buy['purchase_id'],'amount':10,'idempotency_key':'v021-refund'})
-    await call('record_refund',{'purchase_event_id':buy['purchase_id'],'account_id':a['id'],'amount':10,'idempotency_key':'v021-refund-wallet'})
+    await call('wubu',{'operation':'record_finance_refund','payload':{'related_transaction_id':buy['id'],'amount':10},'idempotency_key':'v021-refund'})
+    await call('wubu',{'operation':'record_finance_refund','payload':{'related_transaction_id':buy['id'],'account_id':a['id'],'amount':10},'idempotency_key':'v021-refund-wallet'})
     stats=(await call('get_account_statistics',{'account_id':b['id']})).data;assert stats['net_expense']==0 and stats['current_balance']==100,stats
     await call('update_account',{'account_id':b['id'],'account_class':'STORAGE','idempotency_key':'v021-edit'})
     balance=await call('get_balance',{});assert '自由可用资金' in balance.content and '消费储值' in balance.content

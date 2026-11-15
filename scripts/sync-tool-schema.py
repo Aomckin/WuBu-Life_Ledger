@@ -1,15 +1,35 @@
-"""Regenerate the Zhaoxi tool's embedded request schemas from the API contract."""
+"""Regenerate the Zhaoxi tool request schemas from the current REST contract."""
 import json
 from pathlib import Path
+import runpy
+import re
+
 root = Path(__file__).resolve().parents[1]
+routes = runpy.run_path(str(root / "tools/wubu_tool/wubu_tool/client.py"))["ROUTES"]
 document = json.loads((root / "internal/web/static/openapi.json").read_text(encoding="utf-8"))
-names = ["ResidenceInput", "ResidenceLink", "ClaimInput", "ClaimSettlement", "PlannedCashflowInput", "PlannedAction", "RunwaySettings", "ExpenseNatureInput", "PurchaseInput", "PurchaseLine", "PurchaseAmendment", "PurchaseDeletion", "Category", "InventoryAction", "ConsumeInput", "InventoryAdjustment", "MaintenanceInput", "AliasInput", "DurablePatch", "ReturnItem", "AccountInput", "MoneySettings", "IncomeInput", "ExpenseInput", "TransferInput", "RefundInput", "BalanceAdjustmentInput", "DurableActionInput", "AccountPatch", "TopUpInput", "BonusInput"]
-inputs = {"record_purchase_event":"PurchaseInput", "consume_item":"ConsumeInput", "adjust_inventory":"InventoryAdjustment", "open_item":"InventoryAction", "finish_item":"InventoryAction", "discard_item":"InventoryAction", "add_maintenance_event":"MaintenanceInput", "add_product_alias":"AliasInput", "update_durable_details":"DurablePatch"}
-inputs.update({"amend_purchase_event":"PurchaseAmendment", "delete_purchase_event":"PurchaseDeletion"})
-inputs.update({"top_up_account":"TopUpInput", "record_bonus":"BonusInput", "update_account":"AccountPatch", "create_account":"AccountInput", "set_default_payment_account":"MoneySettings", "record_income":"IncomeInput", "record_expense":"ExpenseInput", "transfer_money":"TransferInput", "record_refund":"RefundInput", "adjust_balance":"BalanceAdjustmentInput", "reconcile_account":"BalanceAdjustmentInput", "add_maintenance":"MaintenanceInput", "sell_item":"DurableActionInput", "retire_item":"DurableActionInput", "move_item":"DurableActionInput", "set_durable_status":"DurableActionInput"})
-inputs.update({'create_planned_cashflow': 'PlannedCashflowInput', 'update_planned_cashflow': 'PlannedCashflowInput', 'cancel_planned_cashflow': 'PlannedAction', 'skip_planned_cashflow': 'PlannedAction', 'complete_planned_cashflow': 'PlannedAction', 'set_runway_settings': 'RunwaySettings', 'update_expense_nature': 'ExpenseNatureInput'})
-inputs.update({'create_residence': 'ResidenceInput', 'update_residence': 'ResidenceInput', 'link_residence_cost': 'ResidenceLink', 'record_deposit': 'ClaimInput', 'return_deposit': 'ClaimSettlement', 'forfeit_deposit': 'ClaimSettlement', 'create_receivable': 'ClaimInput', 'settle_receivable': 'ClaimSettlement', 'cancel_receivable': 'ClaimSettlement'})
-names += ['RawFinancialInput', 'FinancialReview', 'TransactionAnnotation', 'MerchantRule', 'SemanticEvidence', 'FinancialSettings']
-inputs.update({'annotate_transaction': 'TransactionAnnotation', 'review_financial_match': 'FinancialReview', 'capture_financial_event': 'RawFinancialInput', 'create_merchant_rule': 'MerchantRule', 'update_merchant_rule': 'MerchantRule', 'create_purchase_from_transaction': 'PurchaseInput', 'attach_semantic_evidence': 'SemanticEvidence', 'set_financial_settings': 'FinancialSettings'})
-output = json.dumps({"schemas":{name:document["components"]["schemas"][name] for name in names}, "inputs":inputs}, ensure_ascii=False, indent=2).replace("#/components/schemas/", "#/$defs/")
+paths = {re.sub(r"\{[^}]+\}", "{}", path): value for path, value in document["paths"].items()}
+inputs = {}
+for operation, (method, route) in routes.items():
+    if method == "GET":
+        continue
+    path = re.sub(r"\{[^}]+\}", "{}", "/api/v1" + route)
+    body = paths[path][method.lower()].get("requestBody")
+    if body is None:
+        continue
+    schema = body["content"]["application/json"]["schema"]
+    if "$ref" in schema:
+        inputs[operation] = schema["$ref"].rsplit("/", 1)[-1]
+
+schemas = {}
+pending = list(inputs.values())
+while pending:
+    name = pending.pop()
+    if name in schemas:
+        continue
+    schemas[name] = document["components"]["schemas"][name]
+    pending.extend(re.findall(r"#/components/schemas/([\w-]+)", json.dumps(schemas[name])))
+
+output = json.dumps({"schemas": schemas, "inputs": inputs}, ensure_ascii=False, indent=2).replace(
+    "#/components/schemas/", "#/$defs/"
+)
 (root / "tools/wubu_tool/wubu_tool/api_schema.json").write_text(output + "\n", encoding="utf-8")

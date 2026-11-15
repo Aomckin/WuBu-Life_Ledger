@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "0.4.0",
-    "description": "Personal money and item lifecycle database based on Stockroom. One purchase transaction updates money, items, stock and history. CNY only. Bind to loopback by default. Optional AI Intake changes inventory only; use purchases to record expenses."
+    "version": "1.0.0-rc.2",
+    "description": "Personal Items and Finance ledger with optional Links and AI Assistance. Independent write operations commit only their domain. CNY only. Bind to loopback by default."
   },
   "servers": [
     {
@@ -1058,512 +1058,6 @@
         }
       }
     },
-    "/api/v1/purchases": {
-      "post": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "record_purchase_event",
-        "summary": "record purchase event",
-        "description": "一个事务内统一解析名称、规格和别名，自动创建新消耗品，记录购买、支出、库存与完整事件。返回金额/规格 Warning 和库存摘要。名称歧义返回 ITEM_AMBIGUOUS 候选，失败不保留幂等键。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
-          },
-          {
-            "name": "dry_run",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            },
-            "description": "true 时执行解析和验证，不写数据库或幂等键。"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success (same status on idempotent replay).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Purchase"
-                }
-              }
-            },
-            "headers": {
-              "Idempotency-Replayed": {
-                "schema": {
-                  "type": "boolean"
-                },
-                "description": "true when the original committed response was replayed."
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "200": {
-            "description": "Dry-run validation only; no writes.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Purchase"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseInput"
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "get_recent_purchases",
-        "summary": "get recent purchases",
-        "description": "",
-        "parameters": [
-          {
-            "name": "from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "RFC3339 including timezone; inclusive"
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "RFC3339 including timezone; exclusive"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500,
-              "default": 100
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          },
-          {
-            "name": "item_id",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            }
-          },
-          {
-            "name": "category",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "maxLength": 100
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success (same status on idempotent replay).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchaseList"
-                }
-              }
-            },
-            "headers": {
-              "Idempotency-Replayed": {
-                "schema": {
-                  "type": "boolean"
-                },
-                "description": "true when the original committed response was replayed."
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
-    "/api/v1/purchases/{id}": {
-      "get": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "get_purchase_event",
-        "summary": "get purchase event",
-        "description": "",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success (same status on idempotent replay).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Purchase"
-                }
-              }
-            },
-            "headers": {
-              "Idempotency-Replayed": {
-                "schema": {
-                  "type": "boolean"
-                },
-                "description": "true when the original committed response was replayed."
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "amend_purchase_event",
-        "summary": "修改整笔购买记录",
-        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "200": {
-            "description": "操作成功；同一幂等键与参数重试返回同一结果。",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Purchase"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseAmendment"
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "delete_purchase_event",
-        "summary": "删除购买记录并撤销费用及库存贡献",
-        "description": "逻辑删除并保留操作审计及库存历史，从购买列表、价格历史和费用合计中移除。库存不足或耐用品已有维护/生命周期记录返回 409，全部回滚。",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "200": {
-            "description": "操作成功；同一幂等键与参数重试返回同一结果。",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchaseDeletionResult"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseDeletion"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/items/{id}/purchases": {
-      "get": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "get_purchase_history",
-        "summary": "get purchase history",
-        "description": "",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "RFC3339 including timezone; inclusive"
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "RFC3339 including timezone; exclusive"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500,
-              "default": 100
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success (same status on idempotent replay).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchaseList"
-                }
-              }
-            },
-            "headers": {
-              "Idempotency-Replayed": {
-                "schema": {
-                  "type": "boolean"
-                },
-                "description": "true when the original committed response was replayed."
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
     "/api/v1/items/{id}/prices": {
       "get": {
         "tags": [
@@ -2194,87 +1688,6 @@
       }
     },
     "/api/v1/items/{id}/maintenance": {
-      "post": {
-        "tags": [
-          "Lifecycle"
-        ],
-        "operationId": "add_maintenance_event",
-        "summary": "add maintenance event",
-        "description": "Durable items only. DONE with cost>0 creates maintenance and MoneyTransaction in the same transaction.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success (same status on idempotent replay).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Maintenance"
-                }
-              }
-            },
-            "headers": {
-              "Idempotency-Replayed": {
-                "schema": {
-                  "type": "boolean"
-                },
-                "description": "true when the original committed response was replayed."
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MaintenanceInput"
-              }
-            }
-          }
-        }
-      },
       "get": {
         "tags": [
           "Lifecycle"
@@ -3083,128 +2496,6 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          }
-        }
-      }
-    },
-    "/api/v1/purchases/record": {
-      "post": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "record_purchase",
-        "summary": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。",
-        "description": "面向 Agent 的简化购买参数。后端默认时间、CNY、source=agent，自动解析或创建商品；可直接通过结果确认库存。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "description": "Use a stable key per real event and reuse it on retries. Durable forever in SQLite. Same key and DTO replay the original response; different operation or input returns 409. Failed transaction does not reserve a key."
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "201": {
-            "description": "Success; inspect warnings.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentPurchaseSummary"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentPurchaseInput"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/purchases/validate": {
-      "post": {
-        "tags": [
-          "Ledger"
-        ],
-        "operationId": "validate_purchase",
-        "summary": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。",
-        "description": "纯读取预检查；缺失商品只展示预计结果，不创建任何实体。 For CONSUMPTION payment with merchant binding, omitted merchant is inferred and persisted; explicit mismatched merchant returns 409 ACCOUNT_MERCHANT_MISMATCH before any write. Explicit account_id wins over default.",
-        "parameters": [],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "200": {
-            "description": "Success; inspect warnings.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentPurchaseSummary"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentPurchaseInput"
-              }
-            }
           }
         }
       }
@@ -4026,7 +3317,7 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "description": "Returns separate liquid_balance and consumption_balance; total_value is their sum. Active STORAGE contributes to liquid, active CONSUMPTION to restricted value. Unknown and credit cards excluded from both. available_balance aliases liquid; total_balance retains legacy net semantics. Classification follows current account class, without historical versioning."
+        "description": "Returns liquid_balance for available storage funds and consumption_balance for restricted funds. total_value is their sum. total_balance is the net balance including credit card debts."
       }
     },
     "/api/v1/money/expenses": {
@@ -4221,72 +3512,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TransferInput"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/money/refunds": {
-      "post": {
-        "tags": [
-          "Money"
-        ],
-        "operationId": "record_refund",
-        "summary": "record refund",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MoneyResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Conflict or idempotency mismatch",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        },
-        "description": "Atomic state + event. Refund links original EXPENSE; return_items only when goods actually returned. Transfer posts both linked legs and preserves total money.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefundInput"
               }
             }
           }
@@ -5638,81 +4863,6 @@
         "description": ""
       }
     },
-    "/api/v1/items/{id}/sell": {
-      "post": {
-        "tags": [
-          "Lifecycle"
-        ],
-        "operationId": "sell_item",
-        "summary": "sell item",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DurableDetails"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Conflict or idempotency mismatch",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        },
-        "description": "SOLD/RETIRED are terminal. STORED remains owned with quantity 1. Sell requires positive amount and posts income atomically.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DurableActionInput"
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/items/{id}/retire": {
       "post": {
         "tags": [
@@ -6160,187 +5310,6 @@
           }
         },
         "description": ""
-      }
-    },
-    "/api/v1/money/import/preview": {
-      "post": {
-        "tags": [
-          "Money"
-        ],
-        "operationId": "preview_money_import",
-        "summary": "preview money import",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "rows": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    },
-                    "imported": {
-                      "type": "integer"
-                    },
-                    "duplicates": {
-                      "type": "integer"
-                    },
-                    "skipped": {
-                      "type": "integer"
-                    },
-                    "skipped_rows": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/MoneyImportSkipped"
-                      }
-                    },
-                    "transactions": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Conflict or idempotency mismatch",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        },
-        "description": "Runs the same reconciliation as import inside a rolled-back transaction. Imported, duplicate and review counts describe the current snapshot; no generated IDs or state are persisted. Legacy compatibility only; the product uses explicit native statement endpoints.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MoneyImportInput"
-              }
-            }
-          }
-        },
-        "deprecated": true
-      }
-    },
-    "/api/v1/money/import": {
-      "post": {
-        "tags": [
-          "Money"
-        ],
-        "operationId": "import_money",
-        "summary": "import money",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "description": "Stable key per reality event. Same key/input replays result; different input returns 409. Failed events do not reserve keys."
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "rows": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    },
-                    "imported": {
-                      "type": "integer"
-                    },
-                    "duplicates": {
-                      "type": "integer"
-                    },
-                    "skipped": {
-                      "type": "integer"
-                    },
-                    "skipped_rows": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/MoneyImportSkipped"
-                      }
-                    },
-                    "transactions": {
-                      "type": "array",
-                      "items": {
-                        "type": "object"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidJSON"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Conflict or idempotency mismatch",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          }
-        },
-        "description": "WeChat unresolved refunds/returned payments and neutral movements are excluded with source row and reason in skipped_rows; inspect preview before commit. Generic invalid rows still fail atomically. Legacy compatibility only; the product uses explicit native statement endpoints.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MoneyImportInput"
-              }
-            }
-          }
-        },
-        "deprecated": true
       }
     },
     "/api/v1/money/top-ups": {
@@ -8031,7 +7000,14 @@
         "summary": "capture_financial_event",
         "responses": {
           "201": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawFinancialEvent"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -8062,7 +7038,14 @@
         "summary": "review_financial_match",
         "responses": {
           "200": {
-            "description": "Reviewed evidence; raw text unchanged"
+            "description": "Reviewed evidence; raw text unchanged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawFinancialEvent"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -8181,45 +7164,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MerchantRule"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/financial/transactions/{id}/purchase": {
-      "post": {
-        "operationId": "create_purchase_from_transaction",
-        "summary": "create_purchase_from_transaction",
-        "responses": {
-          "201": {
-            "description": "OK"
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseInput"
               }
             }
           }
@@ -8590,6 +7534,898 @@
           },
           "404": {
             "description": "Batch not found"
+          }
+        }
+      }
+    },
+    "/api/v1/acquisitions": {
+      "post": {
+        "summary": "Record an Items acquisition and change stock only",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquisitionInput"
+              }
+            }
+          }
+        },
+        "operationId": "record_acquisition",
+        "tags": [
+          "Items"
+        ]
+      },
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "operationId": "list_acquisitions",
+        "summary": "List Items acquisitions",
+        "description": "Returns item facts and historical snapshots. Use Links for associations with financial transactions.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "RFC3339 including timezone; inclusive"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "RFC3339 including timezone; exclusive"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseList"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/acquisitions/{id}": {
+      "get": {
+        "summary": "Read acquisition and any historical snapshots",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "get_acquisition",
+        "tags": [
+          "Items"
+        ]
+      },
+      "put": {
+        "summary": "Amend an acquisition and stock only",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquisitionAmendment"
+              }
+            }
+          }
+        },
+        "operationId": "amend_acquisition",
+        "tags": [
+          "Items"
+        ]
+      },
+      "delete": {
+        "summary": "Cancel an acquisition and compensate stock only",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseDeletion"
+              }
+            }
+          }
+        },
+        "operationId": "delete_acquisition",
+        "tags": [
+          "Items"
+        ]
+      }
+    },
+    "/api/v1/items/{id}/events/maintenance": {
+      "post": {
+        "summary": "Record a durable maintenance fact",
+        "responses": {
+          "201": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Maintenance"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceRecord"
+              }
+            }
+          }
+        },
+        "operationId": "record_maintenance",
+        "tags": [
+          "Items"
+        ]
+      }
+    },
+    "/api/v1/items/{id}/events/sale": {
+      "post": {
+        "summary": "Mark a durable sold without posting income",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleRecord"
+              }
+            }
+          }
+        },
+        "operationId": "record_sale",
+        "tags": [
+          "Items"
+        ]
+      }
+    },
+    "/api/v1/items/{id}/events/return": {
+      "post": {
+        "summary": "Record actual returned stock without posting a refund",
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnRecord"
+              }
+            }
+          }
+        },
+        "operationId": "record_return",
+        "tags": [
+          "Items"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds": {
+      "post": {
+        "summary": "Post a refund against an original expense without returning stock",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinanceRefundInput"
+              }
+            }
+          }
+        },
+        "operationId": "record_finance_refund",
+        "tags": [
+          "Finance"
+        ]
+      }
+    },
+    "/api/v1/links": {
+      "post": {
+        "summary": "Associate existing facts without changing their values",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomainLinkInput"
+              }
+            }
+          }
+        },
+        "operationId": "link_transaction",
+        "tags": [
+          "Links"
+        ]
+      },
+      "get": {
+        "summary": "List optional associations",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DomainLink"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "source_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "transaction_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "operationId": "list_domain_links",
+        "tags": [
+          "Links"
+        ]
+      }
+    },
+    "/api/v1/links/{id}": {
+      "delete": {
+        "summary": "Remove only an association",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "operationId": "unlink_transaction",
+        "tags": [
+          "Links"
+        ]
+      }
+    },
+    "/api/v1/financial/transactions/{id}/acquisition": {
+      "post": {
+        "summary": "Backfill Items from an existing expense without charging again",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcquisitionBackfill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Fact not found"
+          },
+          "409": {
+            "description": "Conflict or mismatched idempotency key"
+          },
+          "503": {
+            "description": "If link creation failed after acquisition committed, error.code is acquisition_link_incomplete and error.acquisition includes the committed receipt. Retry with the same request and Idempotency-Key."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquisitionInput"
+              }
+            }
+          }
+        },
+        "operationId": "backfill_acquisition",
+        "tags": [
+          "Links"
+        ]
+      }
+    },
+    "/api/v1/items/{id}/acquisitions": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "operationId": "get_purchase_history",
+        "summary": "List acquisitions for an item",
+        "description": "",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "RFC3339 including timezone; inclusive"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "RFC3339 including timezone; exclusive"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success (same status on idempotent replay).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseList"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "boolean"
+                },
+                "description": "true when the original committed response was replayed."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Negative stock, ambiguous/mismatched item, duplicate external_id or idempotency conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         }
       }
@@ -9042,24 +8878,6 @@
           }
         }
       },
-      "Adjustment": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "delta"
-        ],
-        "properties": {
-          "delta": {
-            "type": "number",
-            "minimum": -1000000000,
-            "maximum": 1000000000,
-            "not": {
-              "const": 0
-            },
-            "description": "Rounded to three decimal places before the atomic adjustment."
-          }
-        }
-      },
       "ItemList": {
         "type": "object",
         "required": [
@@ -9377,6 +9195,10 @@
         "properties": {
           "auto_analyze": {
             "type": "boolean"
+          },
+          "ai_available": {
+            "type": "boolean",
+            "readOnly": true
           }
         }
       },
@@ -9777,227 +9599,6 @@
           }
         }
       },
-      "PurchaseLine": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 80,
-            "description": "商品基础名称，例如无糖可乐；旧的名称加规格输入会自动拆分。"
-          },
-          "item_id": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "quantity": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1000000000,
-            "multipleOf": 0.001,
-            "exclusiveMinimum": 0,
-            "description": "购买数量，例如 1 瓶的数量为 1；不能用规格容量 2L 替代数量。"
-          },
-          "unit": {
-            "type": "string",
-            "maxLength": 20,
-            "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
-          },
-          "unit_price": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "subtotal": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "item_type": {
-            "enum": [
-              "CONSUMABLE",
-              "DURABLE",
-              "UNTRACKED"
-            ],
-            "type": "string",
-            "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id.",
-            "default": "CONSUMABLE"
-          },
-          "category": {
-            "$ref": "#/components/schemas/Category"
-          },
-          "location": {
-            "type": "string",
-            "maxLength": 60
-          },
-          "confidence": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "minimum": 0,
-            "maximum": 1
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 500
-          },
-          "brand": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "model": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "serial_number": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "warranty_until": {
-            "type": "string",
-            "format": "date"
-          },
-          "id": {
-            "type": "string",
-            "description": "改单保留原商品行 id；新增行不传 id。"
-          },
-          "spec": {
-            "type": "string",
-            "maxLength": 100,
-            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
-          },
-          "package_size": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "exclusiveMinimum": 0
-          },
-          "package_unit": {
-            "type": "string",
-            "maxLength": 20,
-            "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
-          },
-          "quantity_added": {
-            "type": "number",
-            "readOnly": true
-          },
-          "inventory_after": {
-            "type": "number",
-            "readOnly": true,
-            "description": "写入完成时的库存快照，幂等重放返回原快照。"
-          }
-        },
-        "required": [
-          "name",
-          "quantity",
-          "unit",
-          "unit_price",
-          "subtotal"
-        ],
-        "additionalProperties": false
-      },
-      "PurchaseInput": {
-        "type": "object",
-        "properties": {
-          "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "purchased_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "total_amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "currency": {
-            "type": "string",
-            "enum": [
-              "CNY"
-            ],
-            "default": "CNY"
-          },
-          "payment_method": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "receipt",
-              "system"
-            ],
-            "default": "manual"
-          },
-          "external_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "category": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "discount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "extra_fee": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "items": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 500,
-            "items": {
-              "$ref": "#/components/schemas/PurchaseLine"
-            }
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "expense_nature": {
-            "type": "string",
-            "enum": [
-              "",
-              "DAILY",
-              "FIXED",
-              "SETUP",
-              "CAPITAL",
-              "EXCEPTIONAL"
-            ]
-          }
-        },
-        "required": [
-          "total_amount",
-          "items"
-        ],
-        "additionalProperties": false
-      },
       "Purchase": {
         "type": "object",
         "properties": {
@@ -10022,10 +9623,6 @@
               "CNY"
             ],
             "default": "CNY"
-          },
-          "payment_method": {
-            "type": "string",
-            "maxLength": 100
           },
           "source": {
             "type": "string",
@@ -10088,47 +9685,6 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
-          },
-          "purchase_id": {
-            "type": "string"
-          },
-          "expense_amount": {
-            "type": "number"
-          },
-          "validation_status": {
-            "type": "string",
-            "enum": [
-              "VALID",
-              "WARNING"
-            ]
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PurchaseWarning"
-            }
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "COMPLETED",
-              "PARTIAL_REFUND",
-              "REFUNDED",
-              "PREVIEW",
-              ""
-            ]
-          },
-          "refunded_amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
           }
         },
         "required": [
@@ -10411,7 +9967,8 @@
               "ADJUST",
               "OPEN",
               "FINISH",
-              "DISCARD"
+              "DISCARD",
+              "RETURN"
             ],
             "type": "string"
           },
@@ -10475,63 +10032,6 @@
           "event"
         ]
       },
-      "MaintenanceInput": {
-        "type": "object",
-        "properties": {
-          "occurred_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "receipt",
-              "system"
-            ],
-            "default": "manual"
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "title": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "cost": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DONE",
-              "PLANNED"
-            ],
-            "default": "DONE",
-            "description": "PLANNED requires cost=0; DONE cost>0 posts MoneyTransaction and account balance atomically."
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          }
-        },
-        "required": [
-          "title"
-        ],
-        "additionalProperties": false
-      },
       "Maintenance": {
         "type": "object",
         "properties": {
@@ -10540,27 +10040,16 @@
             "format": "date-time"
           },
           "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "receipt",
-              "system"
-            ],
-            "default": "manual"
+            "type": "string"
           },
           "note": {
-            "type": "string",
-            "maxLength": 2000
+            "type": "string"
           },
           "title": {
-            "type": "string",
-            "maxLength": 200
+            "type": "string"
           },
           "description": {
-            "type": "string",
-            "maxLength": 2000
+            "type": "string"
           },
           "cost": {
             "type": "number",
@@ -10574,9 +10063,7 @@
             "enum": [
               "DONE",
               "PLANNED"
-            ],
-            "default": "DONE",
-            "description": "PLANNED must have cost=0; DONE cost>0 creates Expense atomically."
+            ]
           },
           "id": {
             "type": "string",
@@ -10585,17 +10072,6 @@
           "item_id": {
             "type": "string",
             "maxLength": 200
-          },
-          "expense_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           }
         },
         "required": [
@@ -10609,18 +10085,6 @@
             "type": "string",
             "maxLength": 200
           },
-          "purchase_event_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "maintenance_event_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "amount": {
             "type": "number",
             "minimum": 0,
@@ -10628,18 +10092,11 @@
             "multipleOf": 0.01,
             "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
           },
-          "currency": {
-            "const": "CNY"
-          },
           "category": {
             "type": "string",
             "maxLength": 200
           },
           "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "payment_method": {
             "type": "string",
             "maxLength": 200
           },
@@ -10659,7 +10116,6 @@
         "required": [
           "id",
           "amount",
-          "currency",
           "occurred_at"
         ]
       },
@@ -10886,20 +10342,6 @@
             ],
             "description": "ARCHIVED input maps to STORED; DISCARDED to RETIRED. SOLD posts income atomically; ended lifecycle cannot be restored."
           },
-          "sold_at": {
-            "type": "string",
-            "description": "RFC3339 timestamp or empty; required for SOLD"
-          },
-          "sold_price": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
           "note": {
             "type": "string",
             "maxLength": 2000
@@ -10962,13 +10404,6 @@
             }
           },
           "total_balance": {
-            "type": "number",
-            "minimum": -10000000000,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "Signed net balance or delta in CNY yuan."
-          },
-          "available_balance": {
             "type": "number",
             "minimum": -10000000000,
             "maximum": 10000000000,
@@ -11163,101 +10598,6 @@
           "items"
         ]
       },
-      "PurchaseAmendment": {
-        "type": "object",
-        "properties": {
-          "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "purchased_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "total_amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "currency": {
-            "type": "string",
-            "enum": [
-              "CNY"
-            ],
-            "default": "CNY"
-          },
-          "payment_method": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "receipt",
-              "system"
-            ],
-            "default": "manual"
-          },
-          "external_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "category": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "discount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "extra_fee": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan (元), at most two decimals; persisted as integer cents."
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "items": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 500,
-            "items": {
-              "$ref": "#/components/schemas/PurchaseLine"
-            }
-          },
-          "expected_updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "刚读取的购买记录 updated_at；版本不一致返回 409。"
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          }
-        },
-        "required": [
-          "total_amount",
-          "items",
-          "expected_updated_at",
-          "source",
-          "external_id"
-        ],
-        "additionalProperties": false,
-        "description": "整笔替换购买。保留 source、external_id 和原商品行 id。费用与库存差额在同一事务内更新；既有消耗保留。换单位只允许没有其他购买或库存变化的独立物品。已关联商品行不能改变 item_type 或 item_id；移除旧行并新增时，仍受库存与耐用品约束。"
-      },
       "PurchaseDeletion": {
         "type": "object",
         "properties": {
@@ -11271,45 +10611,6 @@
           "expected_updated_at"
         ],
         "additionalProperties": false
-      },
-      "PurchaseDeletionResult": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "deleted": {
-            "type": "boolean",
-            "const": true
-          }
-        },
-        "required": [
-          "id",
-          "deleted"
-        ]
-      },
-      "PurchaseWarning": {
-        "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "PURCHASE_AMOUNT_INCONSISTENT",
-              "SPEC_QUANTITY_CONFLICT"
-            ]
-          },
-          "message": {
-            "type": "string"
-          },
-          "line": {
-            "type": "integer",
-            "minimum": 1
-          }
-        }
       },
       "ItemCandidate": {
         "type": "object",
@@ -11335,169 +10636,6 @@
           },
           "current_quantity": {
             "type": "number"
-          }
-        }
-      },
-      "AgentPurchaseLine": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "name",
-          "quantity",
-          "unit"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
-          },
-          "quantity": {
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "maximum": 1000000000.0,
-            "multipleOf": 0.001
-          },
-          "unit": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 20
-          },
-          "price": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000.0,
-            "multipleOf": 0.01,
-            "description": "每库存单位单价，元。"
-          },
-          "spec": {
-            "type": "string",
-            "maxLength": 100,
-            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
-          },
-          "item_type": {
-            "type": "string",
-            "enum": [
-              "CONSUMABLE",
-              "DURABLE",
-              "UNTRACKED"
-            ],
-            "default": "CONSUMABLE"
-          },
-          "location": {
-            "type": "string",
-            "maxLength": 100
-          }
-        }
-      },
-      "AgentPurchaseInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 500,
-            "items": {
-              "$ref": "#/components/schemas/AgentPurchaseLine"
-            }
-          },
-          "total": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000.0,
-            "multipleOf": 0.01,
-            "description": "实际付款（元）；省略按单价乘数量合计；仅有一个商品且省略价格时按总价推导。"
-          },
-          "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "payment_method": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "expense_nature": {
-            "type": "string",
-            "enum": [
-              "",
-              "DAILY",
-              "FIXED",
-              "SETUP",
-              "CAPITAL",
-              "EXCEPTIONAL"
-            ]
-          }
-        }
-      },
-      "AgentPurchaseSummary": {
-        "type": "object",
-        "required": [
-          "purchase_id",
-          "expense_amount",
-          "items",
-          "warnings",
-          "validation_status"
-        ],
-        "properties": {
-          "purchase_id": {
-            "type": "string"
-          },
-          "expense_amount": {
-            "type": "number"
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PurchaseLineResult"
-            }
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PurchaseWarning"
-            }
-          },
-          "validation_status": {
-            "type": "string",
-            "enum": [
-              "VALID",
-              "WARNING"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "COMPLETED",
-              "PARTIAL_REFUND",
-              "REFUNDED",
-              "PREVIEW",
-              ""
-            ]
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "refunded_amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
           }
         }
       },
@@ -11935,110 +11073,6 @@
         ],
         "additionalProperties": false
       },
-      "ReturnItem": {
-        "type": "object",
-        "properties": {
-          "item_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "quantity": {
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "multipleOf": 0.001
-          }
-        },
-        "required": [
-          "item_id",
-          "quantity"
-        ],
-        "additionalProperties": false
-      },
-      "MoneyInput": {
-        "type": "object",
-        "properties": {
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "from_account": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "to_account": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
-          },
-          "actual_balance": {
-            "type": "number",
-            "minimum": -10000000000,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "Signed net balance or delta in CNY yuan."
-          },
-          "category": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "purchase_event_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "related_transaction_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "external_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "occurred_at": {
-            "type": "string",
-            "description": "RFC3339 with timezone; empty/omitted defaults to now."
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "system",
-              "receipt"
-            ],
-            "default": "manual"
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "return_items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReturnItem"
-            }
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
       "IncomeInput": {
         "type": "object",
         "properties": {
@@ -12201,76 +11235,6 @@
         ],
         "additionalProperties": false
       },
-      "RefundInput": {
-        "type": "object",
-        "properties": {
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
-          },
-          "purchase_event_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "related_transaction_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "external_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "occurred_at": {
-            "type": "string",
-            "description": "RFC3339 with timezone; empty/omitted defaults to now."
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "system",
-              "receipt"
-            ],
-            "default": "manual"
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "return_items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReturnItem"
-            }
-          }
-        },
-        "required": [
-          "amount"
-        ],
-        "additionalProperties": false,
-        "anyOf": [
-          {
-            "required": [
-              "purchase_event_id"
-            ]
-          },
-          {
-            "required": [
-              "related_transaction_id"
-            ]
-          }
-        ]
-      },
       "BalanceAdjustmentInput": {
         "type": "object",
         "properties": {
@@ -12378,14 +11342,6 @@
             "type": "string",
             "maxLength": 200
           },
-          "purchase_event_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "maintenance_event_id": {
-            "type": "string",
-            "maxLength": 200
-          },
           "related_transaction_id": {
             "type": "string",
             "maxLength": 200
@@ -12435,6 +11391,11 @@
               "CAPITAL",
               "EXCEPTIONAL"
             ]
+          },
+          "refundable_amount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Remaining refundable amount for a posted expense, on transaction list responses."
           }
         },
         "required": [
@@ -12485,13 +11446,6 @@
             "multipleOf": 0.01,
             "description": "Legacy net balance across all real accounts, including credit cards and inactive accounts; not a liquid-funds indicator."
           },
-          "available_balance": {
-            "type": "number",
-            "minimum": -10000000000,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "Compatibility alias for liquid_balance; excludes restricted funds, inactive accounts, credit cards, unknown."
-          },
           "accounts": {
             "type": "array",
             "items": {
@@ -12522,7 +11476,6 @@
         },
         "required": [
           "total_balance",
-          "available_balance",
           "accounts"
         ],
         "additionalProperties": false
@@ -12622,18 +11575,6 @@
           "location": {
             "type": "string",
             "maxLength": 100
-          },
-          "amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
           },
           "occurred_at": {
             "type": "string",
@@ -12811,178 +11752,6 @@
         "required": [
           "name"
         ],
-        "additionalProperties": false
-      },
-      "MoneyImportInput": {
-        "type": "object",
-        "properties": {
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "adapter": {
-            "type": "string",
-            "enum": [
-              "generic",
-              "alipay",
-              "wechat"
-            ]
-          },
-          "csv": {
-            "type": "string",
-            "maxLength": 900000
-          }
-        },
-        "required": [
-          "account_id",
-          "adapter",
-          "csv"
-        ],
-        "additionalProperties": false
-      },
-      "MoneyImportRow": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "maxLength": 30
-          },
-          "account_id": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "from_account": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "to_account": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
-          },
-          "amount": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "CNY yuan, persisted as integer cents."
-          },
-          "actual_balance": {
-            "type": "number",
-            "minimum": -10000000000,
-            "maximum": 10000000000,
-            "multipleOf": 0.01,
-            "description": "Signed net balance or delta in CNY yuan."
-          },
-          "category": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "merchant": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "purchase_event_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "related_transaction_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "external_id": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "occurred_at": {
-            "type": "string",
-            "description": "RFC3339 with timezone; empty/omitted defaults to now."
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "agent",
-              "import",
-              "system",
-              "receipt"
-            ],
-            "default": "manual"
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "return_items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReturnItem"
-            }
-          },
-          "raw_record": {
-            "type": "string",
-            "description": "Complete original CSV record, including quoted multiline fields."
-          },
-          "raw_payload": {
-            "type": "string",
-            "description": "JSON object containing original header and parsed field values."
-          }
-        },
-        "required": [
-          "type",
-          "amount"
-        ],
-        "additionalProperties": false
-      },
-      "MoneyImportResult": {
-        "type": "object",
-        "properties": {
-          "rows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoneyImportRow"
-            }
-          },
-          "imported": {
-            "type": "integer"
-          },
-          "duplicates": {
-            "type": "integer"
-          },
-          "skipped": {
-            "type": "integer"
-          },
-          "transactions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoneyTransaction"
-            }
-          },
-          "needs_review": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "raw_events": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RawFinancialEvent"
-            }
-          },
-          "skipped_rows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoneyImportSkipped"
-            }
-          }
-        },
-        "required": [],
         "additionalProperties": false
       },
       "MoneyWarning": {
@@ -13784,21 +12553,6 @@
           }
         }
       },
-      "MoneyImportSkipped": {
-        "type": "object",
-        "properties": {
-          "row": {
-            "type": "integer"
-          },
-          "reason": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "row",
-          "reason"
-        ]
-      },
       "RawFinancialInput": {
         "type": "object",
         "additionalProperties": false,
@@ -13991,33 +12745,6 @@
           "confidence"
         ]
       },
-      "BalanceCheckpoint": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "account_id": {
-            "type": "string"
-          },
-          "observed_balance": {
-            "type": "number"
-          },
-          "expected_balance": {
-            "type": "number"
-          },
-          "difference": {
-            "type": "number"
-          },
-          "unexplained_amount": {
-            "type": "number"
-          },
-          "observed_at": {
-            "type": "string"
-          }
-        }
-      },
       "FinancialSettings": {
         "type": "object",
         "additionalProperties": false,
@@ -14087,133 +12814,6 @@
           "annotation",
           "user_confirmed"
         ]
-      },
-      "RawFinancialEvent": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "provider_code": {
-            "type": "string"
-          },
-          "evidence_key": {
-            "type": "string",
-            "readOnly": true
-          },
-          "import_batch_id": {
-            "type": "string",
-            "readOnly": true
-          },
-          "row_number": {
-            "type": "integer",
-            "readOnly": true
-          },
-          "description_raw": {
-            "type": "string"
-          },
-          "payment_method_raw": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "review_reason": {
-            "type": "string"
-          },
-          "time_precision": {
-            "type": "string",
-            "enum": [
-              "",
-              "DAY",
-              "SECOND"
-            ]
-          },
-          "related_transaction_id": {
-            "type": "string"
-          },
-          "provider": {
-            "type": "string",
-            "enum": [
-              "WECHAT",
-              "ALIPAY",
-              "BANK",
-              "UNIONPAY",
-              "CASH",
-              "OTHER"
-            ]
-          },
-          "capture_source": {
-            "type": "string",
-            "enum": [
-              "CSV_IMPORT",
-              "MANUAL",
-              "AGENT",
-              "SYSTEM"
-            ]
-          },
-          "external_id": {
-            "type": "string"
-          },
-          "captured_at": {
-            "type": "string"
-          },
-          "occurred_at": {
-            "type": "string"
-          },
-          "amount": {
-            "type": "number",
-            "nullable": true
-          },
-          "direction": {
-            "type": "string"
-          },
-          "merchant_raw": {
-            "type": "string"
-          },
-          "payment_channel": {
-            "type": "string"
-          },
-          "funding_hint": {
-            "type": "string"
-          },
-          "account_id": {
-            "type": "string"
-          },
-          "raw_title": {
-            "type": "string"
-          },
-          "raw_text": {
-            "type": "string"
-          },
-          "raw_payload": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "fingerprint": {
-            "type": "string"
-          },
-          "transaction_id": {
-            "type": "string"
-          },
-          "decision": {
-            "type": "string"
-          },
-          "candidates": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
-          }
-        }
       },
       "StatementInput": {
         "type": "object",
@@ -14536,6 +13136,530 @@
           "name",
           "group",
           "extensions"
+        ]
+      },
+      "AcquisitionLine": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "改单保留原商品行 id；新增行不传 id。"
+          },
+          "item_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "商品基础名称，例如无糖可乐；旧的名称加规格输入会自动拆分。"
+          },
+          "spec": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "每包装规格，例如 2L；与购买数量和库存单位分别存储。"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "multipleOf": 0.001,
+            "exclusiveMinimum": 0,
+            "description": "购买数量，例如 1 瓶的数量为 1；不能用规格容量 2L 替代数量。"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
+          },
+          "item_type": {
+            "enum": [
+              "CONSUMABLE",
+              "DURABLE",
+              "UNTRACKED"
+            ],
+            "type": "string",
+            "description": "DURABLE requires quantity=1, one instance per line; UNTRACKED must omit item_id.",
+            "default": "CONSUMABLE"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "brand": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "serial_number": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "warranty_until": {
+            "type": "string",
+            "format": "date"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "package_unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "包装容量或重量单位，如 L、ml；不决定库存数量。"
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "unit"
+        ],
+        "additionalProperties": false
+      },
+      "AcquisitionInput": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcquisitionLine"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AcquisitionAmendment": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcquisitionLine"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          },
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "expected_updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "MaintenanceRecord": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DONE",
+              "PLANNED"
+            ]
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "SaleRecord": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReturnRecord": {
+        "type": "object",
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000
+          }
+        },
+        "required": [
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "FinanceRefundInput": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Account ID or exact name; omitted uses default payment account, then unknown."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01,
+            "description": "CNY yuan, persisted as integer cents."
+          },
+          "related_transaction_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "RFC3339 with timezone; empty/omitted defaults to now."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "agent",
+              "import",
+              "system",
+              "receipt"
+            ],
+            "default": "manual"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "related_transaction_id",
+          "amount"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "purchase_event_id"
+            ]
+          },
+          {
+            "required": [
+              "related_transaction_id"
+            ]
+          }
+        ]
+      },
+      "DomainLinkInput": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "ITEM_ACQUISITION",
+              "MAINTENANCE",
+              "ITEM"
+            ]
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "PURCHASE",
+              "MAINTENANCE",
+              "SALE",
+              "REFUND",
+              "RETURN"
+            ]
+          }
+        },
+        "required": [
+          "source_type",
+          "source_id",
+          "transaction_id",
+          "relation"
+        ],
+        "additionalProperties": false
+      },
+      "DomainLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "ITEM_ACQUISITION",
+              "MAINTENANCE",
+              "ITEM"
+            ]
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "PURCHASE",
+              "MAINTENANCE",
+              "SALE",
+              "REFUND",
+              "RETURN",
+              "CORRECTION"
+            ]
+          },
+          "transaction_amount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Current amount of an associated active Finance transaction, if available."
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "source_type",
+          "source_id",
+          "transaction_id",
+          "relation"
+        ],
+        "additionalProperties": false
+      },
+      "AcquisitionBackfill": {
+        "type": "object",
+        "properties": {
+          "acquisition": {
+            "$ref": "#/components/schemas/Purchase"
+          },
+          "link": {
+            "$ref": "#/components/schemas/DomainLink"
+          }
+        },
+        "required": [
+          "acquisition",
+          "link"
+        ],
+        "additionalProperties": false
+      },
+      "RawFinancialEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider_code": {
+            "type": "string"
+          },
+          "description_raw": {
+            "type": "string"
+          },
+          "payment_method_raw": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "review_reason": {
+            "type": "string"
+          },
+          "time_precision": {
+            "type": "string",
+            "enum": [
+              "",
+              "DAY",
+              "SECOND"
+            ]
+          },
+          "related_transaction_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "WECHAT",
+              "ALIPAY",
+              "BANK",
+              "UNIONPAY",
+              "CASH",
+              "OTHER"
+            ]
+          },
+          "capture_source": {
+            "type": "string",
+            "enum": [
+              "CSV_IMPORT",
+              "MANUAL",
+              "AGENT",
+              "SYSTEM"
+            ]
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "captured_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "direction": {
+            "type": "string"
+          },
+          "merchant_raw": {
+            "type": "string"
+          },
+          "payment_channel": {
+            "type": "string"
+          },
+          "funding_hint": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "raw_title": {
+            "type": "string"
+          },
+          "raw_text": {
+            "type": "string"
+          },
+          "raw_payload": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "provider",
+          "capture_source",
+          "raw_text",
+          "id",
+          "status",
+          "fingerprint",
+          "decision",
+          "candidates",
+          "confidence"
         ]
       }
     }

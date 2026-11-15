@@ -157,7 +157,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) apiRoot(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name": "物簿 Life Ledger API", "version": "v1", "app_version": "0.4.0", "accounts": "/api/v1/accounts", "transactions": "/api/v1/money/transactions", "balances": "/api/v1/money/balance", "durables": "/api/v1/durables", "purchases": "/api/v1/purchases", "expenses": "/api/v1/expenses", "inventory_events": "/api/v1/inventory-events", "maintenance": "/api/v1/maintenance", "ledger_summary": "/api/v1/ledger/summary",
+		"name": "物簿 Life Ledger API", "version": "v1", "app_version": a.version, "acquisitions": "/api/v1/acquisitions", "links": "/api/v1/links", "accounts": "/api/v1/accounts", "transactions": "/api/v1/money/transactions", "balances": "/api/v1/money/balance", "durables": "/api/v1/durables", "expenses": "/api/v1/expenses", "inventory_events": "/api/v1/inventory-events", "maintenance": "/api/v1/maintenance", "ledger_summary": "/api/v1/ledger/summary",
 		"items": "/api/v1/items", "intake": "/api/v1/intake", "summary": "/api/v1/summary",
 		"analysis": "/api/v1/intake/{id}/analysis", "batches": "/api/v1/intake/batches", "apply_ready": "/api/v1/intake/apply-ready", "inbox_settings": "/api/v1/intake/settings", "analyze_all": "/api/v1/intake/analyze-all", "add_all": "/api/v1/intake/add-all", "analyze_and_add_all": "/api/v1/intake/analyze-and-add-all", "metadata": "/api/v1/meta", "openapi": "/api/v1/openapi.json",
 	})
@@ -416,8 +416,8 @@ func (a *API) handleStoreError(w http.ResponseWriter, r *http.Request, err error
 		a.errorResponse(w, r, http.StatusConflict, "ledger_conflict", err.Error(), nil)
 	case errors.Is(err, store.ErrNotFound):
 		code, message := "ITEM_NOT_FOUND", "未找到物品，请核对名称或规格。"
-		if strings.HasPrefix(r.URL.Path, "/api/v1/purchases/") {
-			code, message = "PURCHASE_NOT_FOUND", "未找到购买记录，可能已被删除。"
+		if strings.HasPrefix(r.URL.Path, "/api/v1/acquisitions/") {
+			code, message = "ACQUISITION_NOT_FOUND", "未找到购入记录，可能已被删除。"
 		}
 		a.errorResponse(w, r, http.StatusNotFound, code, message, nil)
 	case errors.Is(err, store.ErrNegativeQuantity):

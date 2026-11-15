@@ -6,12 +6,7 @@ from urllib.error import HTTPError, URLError
 from wubu_tool.client import WubuClient, WubuError
 
 class ClientTests(unittest.TestCase):
-    def test_validation_posts_without_write_key_and_preserves_candidates(self):
-        with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"warnings":[]}')) as call:
-            WubuClient().call("validate_purchase",payload={"items":[]})
-            request=call.call_args.args[0]
-            self.assertEqual(request.method,"POST")
-            self.assertIsNone(request.get_header("Idempotency-key"))
+    def test_resolver_preserves_candidates(self):
         detail={"code":"ITEM_AMBIGUOUS","message":"select","retryable":False,"suggested_action":"ask_user_to_select_candidate","candidates":[{"id":"one"}]}
         error=HTTPError("http://127.0.0.1",409,"conflict",{},io.BytesIO(json.dumps({"error":detail}).encode()))
         with patch("wubu_tool.client.urlopen",side_effect=error):
@@ -19,13 +14,13 @@ class ClientTests(unittest.TestCase):
                 WubuClient().call("consume_by_name",payload={"name":"cola","quantity":1},idempotency_key="same")
             self.assertEqual(caught.exception.detail,detail)
     def test_amend_and_delete_keep_version_and_stable_key(self):
-        for operation, method in [("amend_purchase_event", "PUT"), ("delete_purchase_event", "DELETE")]:
+        for operation, method in [("amend_acquisition", "PUT"), ("delete_acquisition", "DELETE")]:
             with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"id":"purchase"}')) as call:
                 payload = {"expected_updated_at":"2026-10-06T02:00:00Z"}
                 WubuClient().call(operation, purchase_id="purchase/1", payload=payload, idempotency_key="correction-1")
                 request = call.call_args.args[0]
                 self.assertEqual(request.method, method)
-                self.assertTrue(request.full_url.endswith("/purchases/purchase%2F1"))
+                self.assertTrue(request.full_url.endswith("/acquisitions/purchase%2F1"))
                 self.assertEqual(json.loads(request.data), payload)
                 self.assertEqual(request.get_header("Idempotency-key"), "correction-1")
 
@@ -39,12 +34,12 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(result["quantity"], 4)
 
     def test_write_requires_key_and_preserves_body(self):
-        with self.assertRaises(ValueError): WubuClient().call("record_purchase_event", payload={})
+        with self.assertRaises(ValueError): WubuClient().call("record_acquisition", payload={})
         with patch("wubu_tool.client.urlopen", return_value=io.BytesIO(b'{"id":"purchase"}')) as call:
-            WubuClient().call("record_purchase_event", payload={"total_amount":229}, idempotency_key="event-1")
+            WubuClient().call("record_acquisition", payload={"items":[{"name":"可乐","quantity":2,"unit":"瓶"}]}, idempotency_key="event-1")
             request = call.call_args.args[0]
             self.assertEqual(request.get_header("Idempotency-key"), "event-1")
-            self.assertEqual(json.loads(request.data)["total_amount"], 229)
+            self.assertEqual(json.loads(request.data)["items"][0]["quantity"], 2)
 
     def test_network_failure_does_not_retry_write(self):
         with patch("wubu_tool.client.urlopen", side_effect=URLError("timeout")) as call:

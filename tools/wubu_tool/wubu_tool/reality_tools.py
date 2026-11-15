@@ -42,25 +42,10 @@ class AccountEditInput(WriteInput):
     active: bool | None = None
     name: str | None = Field(default=None,min_length=1,max_length=100)
     note: str | None = Field(default=None,max_length=2000)
-class ReturnedItem(EventInput):
-    item_id: str = Field(min_length=1)
-    quantity: float = Field(gt=0,le=1_000_000_000)
-class RefundInput(PaymentInput):
-    purchase_event_id: str = Field(default="",description="原购买 ID；与 related_transaction_id 至少提供一个。")
-    related_transaction_id: str = Field(default="",description="原支出 ID，支持非购买支出/维护退款。")
-    return_items: list[ReturnedItem] = Field(default_factory=list,description="实际退回的商品和数量，留空仅退款，不自动猜退货。")
 class BalanceInput(WriteInput):
     account_id: str = Field(min_length=1)
     actual_balance: float = Field(ge=-10_000_000_000,le=10_000_000_000,description="用户确认的真实余额；信用卡净余额可为负。")
     reason: str = Field(default="",max_length=2000)
-class MaintenanceInput(WriteInput):
-    item_id: str = Field(min_length=1)
-    title: str = Field(min_length=1,max_length=200)
-    cost: float = Field(default=0,ge=0,le=10_000_000_000)
-    account_id: str = ""
-    occurred_at: str = ""
-class SellInput(PaymentInput):
-    item_id: str = Field(min_length=1)
 class ItemWriteInput(WriteInput):
     item_id: str = Field(min_length=1)
     occurred_at: str = ""
@@ -139,15 +124,12 @@ class RealityTool(Tool):
 def create_reality_tools(client):
     definitions=[
         ("create_account",AccountInput,"创建存储或消费资金账户，可绑定消费商家；初始余额留下调整历史。信用卡采用净余额，债务为负。",True),
-        ("set_default_payment_account",DefaultAccountInput,"设置默认付款账户，后续购买和维护可省略账户。",True),
+        ("set_default_payment_account",DefaultAccountInput,"设置默认付款账户，适用于独立的资金支出。",True),
         ("record_income",IncomeInput,"记录工资等收入并增加账户余额。",True),
-        ("record_expense",ExpenseInput,"记录无库存意义的支出，例如打车或餐馆。",True),
+        ("record_expense",ExpenseInput,"独立记录实际支出。购入已登记时也可使用，再按需关联。",True),
         ("transfer_money",TransferInput,"从一个账户转钱到另一个账户；原子完成两条关联流水，不算消费或收入。",True),
-        ("record_refund",RefundInput,"记录关联原支出的退款，恢复资金并冲减消费；实际退货时明确 return_items。",True),
         ("adjust_balance",BalanceInput,"按真实余额纠正账户，自动记录前后余额与差额。",True),
         ("reconcile_account",BalanceInput,"核对真实余额并留下调整事件。",True),
-        ("add_maintenance",MaintenanceInput,"记录耐用品维护及费用，同步扣款并保留费用关联。",True),
-        ("sell_item",SellInput,"出售耐用品，保存售价和售出事件并将收入写入账户。",True),
         ("retire_item",ItemWriteInput,"将耐用品退休报废，保留购买和维护历史。",True),
         ("move_item",MoveInput,"移动耐用品，记录位置变化。",True),
         ("set_durable_status",StatusInput,"记录在用、收纳或丢失状态；找到后设为 ACTIVE。",True),

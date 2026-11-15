@@ -55,34 +55,19 @@ func TestFinancialNearbyAmbiguityCannotBeHiddenByPagination(t *testing.T) {
 		t.Fatal(result)
 	}
 }
-func TestFinancialImportResponseMatchesClosedContract(t *testing.T) {
+func TestRawFinancialEventResponseMatchesClosedContract(t *testing.T) {
 	h := testHandler(t)
-	a := performJSON[ledger.Account](t, h, "POST", "/api/v1/accounts", `{"name":"contract-evidence","type":"BANK","initial_balance":100}`, 201)
-	request := map[string]any{"account_id": a.ID, "adapter": "generic", "csv": "occurred_at,type,amount,merchant,external_id\n2026-11-02T04:00:00Z,EXPENSE,3.00,水店,contract-one"}
-	body, e := json.Marshal(request)
-	if e != nil {
-		t.Fatal(e)
-	}
-	w := keyedRequest(t, h, "POST", "/api/v1/money/import", string(body), "contract-csv", 201)
-	var result map[string]any
-	if e = json.Unmarshal(w.Body.Bytes(), &result); e != nil {
-		t.Fatal(e)
+	w := keyedRequest(t, h, "POST", "/api/v1/financial/events", `{"provider":"OTHER","capture_source":"MANUAL","raw_text":"待核对"}`, "contract", 201)
+	var out map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
 	}
 	api := performJSON[map[string]any](t, h, "GET", "/api/v1/openapi.json", "", 200)
 	schemas := api["components"].(map[string]any)["schemas"].(map[string]any)
-	check := func(name string, value map[string]any) {
-		props := schemas[name].(map[string]any)["properties"].(map[string]any)
-		for key := range value {
-			if _, ok := props[key]; !ok {
-				t.Errorf("%s response property %s missing from closed schema", name, key)
-			}
+	props := schemas["RawFinancialEvent"].(map[string]any)["properties"].(map[string]any)
+	for key := range out {
+		if _, ok := props[key]; !ok {
+			t.Errorf("missing response schema field %s", key)
 		}
-	}
-	check("MoneyImportResult", result)
-	for _, row := range result["rows"].([]any) {
-		check("MoneyImportRow", row.(map[string]any))
-	}
-	for _, event := range result["raw_events"].([]any) {
-		check("RawFinancialEvent", event.(map[string]any))
 	}
 }

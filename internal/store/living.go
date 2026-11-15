@@ -18,7 +18,7 @@ func scanResidence(r scanner) (p ledger.Residence, e error) {
 	}
 	return
 }
-func (s *Store) SaveResidence(ctx context.Context, key, id string, p ledger.ResidenceInput) (out ledger.Residence, replay bool, e error) {
+func (s FinanceRepository) SaveResidence(ctx context.Context, key, id string, p ledger.ResidenceInput) (out ledger.Residence, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "residence:"+id, p, &out, func(tx *sql.Tx) error {
 		if strings.TrimSpace(p.Name) == "" || len([]rune(p.Name)) > 200 || len([]rune(p.AddressText)) > 2000 || len([]rune(p.Note)) > 2000 || len(p.PaymentCycle) > 100 || p.MonthlyRent < 0 || p.MonthlyRent > 1e12 {
 			return ledger.ErrInvalid
@@ -49,7 +49,7 @@ func (s *Store) SaveResidence(ctx context.Context, key, id string, p ledger.Resi
 	})
 	return
 }
-func (s *Store) Residences(ctx context.Context) ([]ledger.Residence, error) {
+func (s FinanceRepository) Residences(ctx context.Context) ([]ledger.Residence, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT `+residenceColumns+` FROM residences ORDER BY move_in_date DESC,id`)
 	if e != nil {
 		return nil, e
@@ -65,7 +65,7 @@ func (s *Store) Residences(ctx context.Context) ([]ledger.Residence, error) {
 	}
 	return out, rows.Err()
 }
-func (s *Store) LinkResidenceCost(ctx context.Context, key, id string, p ledger.ResidenceLink) (out ledger.ResidenceLink, replay bool, e error) {
+func (s FinanceRepository) LinkResidenceCost(ctx context.Context, key, id string, p ledger.ResidenceLink) (out ledger.ResidenceLink, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "residence_link:"+id, p, &out, func(tx *sql.Tx) error {
 		if _, err := scanResidence(tx.QueryRowContext(ctx, `SELECT `+residenceColumns+` FROM residences WHERE id=?`, id)); err != nil {
 			return err
@@ -88,7 +88,7 @@ func (s *Store) LinkResidenceCost(ctx context.Context, key, id string, p ledger.
 	})
 	return
 }
-func (s *Store) ResidenceCost(ctx context.Context, id string) (out ledger.ResidenceCost, e error) {
+func (s FinanceRepository) ResidenceCost(ctx context.Context, id string) (out ledger.ResidenceCost, e error) {
 	out.ResidenceID = id
 	out.Groups = []ledger.MoneyGroup{}
 	tx, e := s.db.BeginTx(ctx, nil)
@@ -140,7 +140,7 @@ func scanClaim(r scanner) (p ledger.Claim, e error) {
 	}
 	return
 }
-func (s *Store) CreateClaim(ctx context.Context, key, kind string, p ledger.ClaimInput) (out ledger.Claim, replay bool, e error) {
+func (s FinanceRepository) CreateClaim(ctx context.Context, key, kind string, p ledger.ClaimInput) (out ledger.Claim, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "claim:"+kind, p, &out, func(tx *sql.Tx) error {
 		if (kind != "DEPOSIT" && kind != "RECEIVABLE") || p.Amount <= 0 || p.Amount > 1e12 || len([]rune(p.Counterparty)) > 200 || len([]rune(p.Reason)) > 2000 {
 			return ledger.ErrInvalid
@@ -163,7 +163,7 @@ func (s *Store) CreateClaim(ctx context.Context, key, kind string, p ledger.Clai
 				return err
 			}
 		}
-		t, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: p.AccountID, Amount: p.Amount, OccurredAt: p.OccurredAt, Reason: kind + "_ADVANCE", Note: p.Reason}, "", -ledger.SignedMoney(p.Amount))
+		t, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: p.AccountID, Amount: p.Amount, OccurredAt: p.OccurredAt, Reason: kind + "_ADVANCE", Note: p.Reason}, -ledger.SignedMoney(p.Amount))
 		if e != nil {
 			return e
 		}
@@ -179,7 +179,7 @@ func (s *Store) CreateClaim(ctx context.Context, key, kind string, p ledger.Clai
 	})
 	return
 }
-func (s *Store) SettleClaim(ctx context.Context, key, id, kind, action string, p ledger.ClaimSettlement) (out ledger.Claim, replay bool, e error) {
+func (s FinanceRepository) SettleClaim(ctx context.Context, key, id, kind, action string, p ledger.ClaimSettlement) (out ledger.Claim, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "claim:"+action+":"+id, p, &out, func(tx *sql.Tx) error {
 		var e error
 		out, e = scanClaim(tx.QueryRowContext(ctx, `SELECT `+claimColumns+` FROM living_claims WHERE id=? AND kind=?`, id, kind))
@@ -197,7 +197,7 @@ func (s *Store) SettleClaim(ctx context.Context, key, id, kind, action string, p
 		moneyKind, delta, reason := "ADJUSTMENT", ledger.SignedMoney(p.Amount), kind+"_RETURN"
 		if action == "forfeit" {
 			// Reclassify previously locked cash: release and expense offset in one transaction.
-			if _, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: account, Amount: p.Amount, OccurredAt: p.OccurredAt, Reason: kind + "_RELEASE", RelatedTransactionID: out.SourceTransactionID}, "", ledger.SignedMoney(p.Amount)); e != nil {
+			if _, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: account, Amount: p.Amount, OccurredAt: p.OccurredAt, Reason: kind + "_RELEASE", RelatedTransactionID: out.SourceTransactionID}, ledger.SignedMoney(p.Amount)); e != nil {
 				return e
 			}
 			moneyKind = "EXPENSE"
@@ -206,7 +206,7 @@ func (s *Store) SettleClaim(ctx context.Context, key, id, kind, action string, p
 		} else if action != "return" {
 			return ledger.ErrInvalid
 		}
-		t, e := postMoney(ctx, tx, moneyKind, ledger.MoneyInput{AccountID: account, Amount: p.Amount, ExpenseNature: "EXCEPTIONAL", OccurredAt: p.OccurredAt, Reason: reason, RelatedTransactionID: out.SourceTransactionID}, "", delta)
+		t, e := postMoney(ctx, tx, moneyKind, ledger.MoneyInput{AccountID: account, Amount: p.Amount, ExpenseNature: "EXCEPTIONAL", OccurredAt: p.OccurredAt, Reason: reason, RelatedTransactionID: out.SourceTransactionID}, delta)
 		if e != nil {
 			return e
 		}
@@ -240,7 +240,7 @@ func (s *Store) SettleClaim(ctx context.Context, key, id, kind, action string, p
 	})
 	return
 }
-func (s *Store) Claims(ctx context.Context, kind string) ([]ledger.Claim, error) {
+func (s FinanceRepository) Claims(ctx context.Context, kind string) ([]ledger.Claim, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT `+claimColumns+` FROM living_claims WHERE kind=? ORDER BY julianday(occurred_at) DESC,id`, kind)
 	if e != nil {
 		return nil, e
@@ -256,7 +256,7 @@ func (s *Store) Claims(ctx context.Context, kind string) ([]ledger.Claim, error)
 	}
 	return out, rows.Err()
 }
-func (s *Store) ConsumptionForecast(ctx context.Context, id string, now time.Time) (out ledger.ConsumptionForecast, e error) {
+func (s ItemsRepository) ConsumptionForecast(ctx context.Context, id string, now time.Time) (out ledger.ConsumptionForecast, e error) {
 	out.ItemID = id
 	out.Status = "INSUFFICIENT_DATA"
 	out.Confidence = "LOW"
@@ -304,7 +304,7 @@ func (s *Store) ConsumptionForecast(ctx context.Context, id string, now time.Tim
 	}
 	return out, nil
 }
-func (s *Store) ItemsRunningLow(ctx context.Context, now time.Time) ([]ledger.ConsumptionForecast, error) {
+func (s ItemsRepository) ItemsRunningLow(ctx context.Context, now time.Time) ([]ledger.ConsumptionForecast, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT id FROM items WHERE item_type='CONSUMABLE' ORDER BY id`)
 	if e != nil {
 		return nil, e
@@ -340,7 +340,7 @@ func (s *Store) ItemsRunningLow(ctx context.Context, now time.Time) ([]ledger.Co
 	return out, nil
 }
 
-func (s *Store) ResidenceDurables(ctx context.Context, id string) ([]ledger.DurableDetails, error) {
+func (s ItemsRepository) ResidenceDurables(ctx context.Context, id string) ([]ledger.DurableDetails, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT item_id FROM durable_details WHERE residence_id=? ORDER BY item_id`, id)
 	if e != nil {
 		return nil, e

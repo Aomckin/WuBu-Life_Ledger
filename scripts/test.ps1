@@ -12,6 +12,9 @@ if ($goCommand -eq $localGo) {
 if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
 & $goCommand vet ./...
 if ($LASTEXITCODE -ne 0) { throw 'Go vet failed' }
+$providerDependencies = & $goCommand list -deps ./internal/ai ./internal/media ./internal/links
+if ($LASTEXITCODE -ne 0) { throw 'Dependency inspection failed' }
+if ($providerDependencies -contains 'stockroom/internal/store') { throw 'AI, media and Links must depend on contracts without importing SQLite repositories' }
 if (Get-Command python -ErrorAction SilentlyContinue) {
     $env:PYTHONPATH = Join-Path $projectRoot 'tools\wubu_tool'
     if ($ZhaoxiSource) { $env:PYTHONPATH += ";$ZhaoxiSource" }

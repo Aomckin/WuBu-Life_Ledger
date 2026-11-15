@@ -156,16 +156,13 @@ func captureFinancialTx(ctx context.Context, tx *sql.Tx, p ledger.RawFinancialIn
 			return r, saveRawTx(ctx, tx, r)
 		}
 	}
-	// Exact external IDs are scoped by provider and account. Compare legacy CSV IDs too.
+	// Exact external IDs are scoped by provider and account.
 	if p.ExternalID != "" {
-		legacyID := strings.ToLower(p.Provider) + ":" + p.ExternalID
-		if p.Provider == "OTHER" && p.ProviderCode == "" {
-			legacyID = "generic:" + p.ExternalID
-		}
-		if p.ProviderCode != "" && p.ProviderCode != strings.ToLower(p.Provider) {
-			legacyID = p.ProviderCode + ":" + p.ExternalID
-		}
-		rows, e := tx.QueryContext(ctx, `SELECT DISTINCT m.id FROM money_transactions m LEFT JOIN financial_event_links l ON l.transaction_id=m.id LEFT JOIN raw_financial_events r ON r.id=l.raw_event_id WHERE m.account_id=? AND m.voided_at='' AND m.amount_cents=? AND m.type=? AND ((m.external_id=? AND m.source='import') OR (json_extract(r.payload,'$.provider')=? AND COALESCE(json_extract(r.payload,'$.provider_code'),'') IN (?, '') AND json_extract(r.payload,'$.external_id')=?))`, a.ID, *p.Amount, p.Direction, legacyID, p.Provider, p.ProviderCode, p.ExternalID)
+		rows, e := tx.QueryContext(ctx, `SELECT DISTINCT m.id FROM money_transactions m
+ JOIN financial_event_links l ON l.transaction_id=m.id JOIN raw_financial_events r ON r.id=l.raw_event_id
+ WHERE m.account_id=? AND m.voided_at='' AND m.amount_cents=? AND m.type=?
+ AND json_extract(r.payload,'$.provider')=? AND COALESCE(json_extract(r.payload,'$.provider_code'),'') IN (?, '')
+ AND json_extract(r.payload,'$.external_id')=?`, a.ID, *p.Amount, p.Direction, p.Provider, p.ProviderCode, p.ExternalID)
 		if e != nil {
 			return r, e
 		}
@@ -297,19 +294,14 @@ func commitFinancialTx(ctx context.Context, tx *sql.Tx, r ledger.RawFinancialEve
 		if refunded+input.Amount > original.Amount {
 			return r, ledger.ErrConflict
 		}
-		input.PurchaseEventID = original.PurchaseEventID
 		input.Category = original.Category
 		input.ExpenseNature = original.ExpenseNature
 	}
-	t, e := postMoney(ctx, tx, r.Direction, input, "", delta)
+	t, e := postMoney(ctx, tx, r.Direction, input, delta)
 	if e != nil {
 		return r, e
 	}
-	if r.Direction == "REFUND" && input.PurchaseEventID != "" {
-		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET updated_at=? WHERE id=?`, nextPurchaseVersion(t.CreatedAt), input.PurchaseEventID); e != nil {
-			return r, e
-		}
-	}
+
 	if _, e = tx.ExecContext(ctx, `UPDATE money_transactions SET category=? WHERE id=?`, input.Category, t.ID); e != nil {
 		return r, e
 	}
@@ -340,12 +332,12 @@ func commitFinancialTx(ctx context.Context, tx *sql.Tx, r ledger.RawFinancialEve
 	r.Decision = "CREATE_NEW"
 	return r, saveRawTx(ctx, tx, r)
 }
-func (s *Store) CaptureFinancial(ctx context.Context, key string, p ledger.RawFinancialInput) (ledger.RawFinancialEvent, bool, error) {
+func (s FinanceRepository) CaptureFinancial(ctx context.Context, key string, p ledger.RawFinancialInput) (ledger.RawFinancialEvent, bool, error) {
 	var out ledger.RawFinancialEvent
 	r, e := s.ledgerTx(ctx, key, "capture_financial", p, &out, func(tx *sql.Tx) error { var e error; out, e = captureFinancialTx(ctx, tx, p); return e })
 	return out, r, e
 }
-func (s *Store) ReviewFinancial(ctx context.Context, key, id string, p ledger.FinancialReview) (ledger.RawFinancialEvent, bool, error) {
+func (s FinanceRepository) ReviewFinancial(ctx context.Context, key, id string, p ledger.FinancialReview) (ledger.RawFinancialEvent, bool, error) {
 	var out ledger.RawFinancialEvent
 	r, e := s.ledgerTx(ctx, key, "review_financial:"+id, p, &out, func(tx *sql.Tx) error {
 		var e error
@@ -431,7 +423,7 @@ func (s *Store) ReviewFinancial(ctx context.Context, key, id string, p ledger.Fi
 	})
 	return out, r, e
 }
-func (s *Store) RawFinancialEvents(ctx context.Context, status string, filters ...ledger.RawFinancialQuery) ([]ledger.RawFinancialEvent, error) {
+func (s FinanceRepository) RawFinancialEvents(ctx context.Context, status string, filters ...ledger.RawFinancialQuery) ([]ledger.RawFinancialEvent, error) {
 	f := ledger.RawFinancialQuery{HistoryFilter: ledger.HistoryFilter{Limit: 500}}
 	if len(filters) > 0 {
 		f = filters[0]
@@ -472,7 +464,7 @@ func (s *Store) RawFinancialEvents(ctx context.Context, status string, filters .
 	}
 	return out, nil
 }
-func (s *Store) AnnotateTransaction(ctx context.Context, key, id string, p ledger.TransactionAnnotation) (ledger.TransactionAnnotation, bool, error) {
+func (s FinanceRepository) AnnotateTransaction(ctx context.Context, key, id string, p ledger.TransactionAnnotation) (ledger.TransactionAnnotation, bool, error) {
 	out := p
 	if out.Tags == nil {
 		out.Tags = []string{}
@@ -529,7 +521,7 @@ func mirrorAnnotationTx(ctx context.Context, tx *sql.Tx, id string, p ledger.Tra
 }
 
 // A query returns every candidate. Selection is never inferred from the number of results.
-func (s *Store) FinancialTransactions(ctx context.Context, at string, window int, unannotated bool, filters ...ledger.FinancialQuery) ([]ledger.AnnotatedTransaction, error) {
+func (s FinanceRepository) FinancialTransactions(ctx context.Context, at string, window int, unannotated bool, filters ...ledger.FinancialQuery) ([]ledger.AnnotatedTransaction, error) {
 	if window < 1 || window > 43200 {
 		return nil, ledger.ErrInvalid
 	}
@@ -583,7 +575,7 @@ func (s *Store) FinancialTransactions(ctx context.Context, at string, window int
 	}
 	return out, nil
 }
-func (s *Store) AccountReconciliation(ctx context.Context, account string) ([]ledger.BalanceCheckpoint, error) {
+func (s FinanceRepository) AccountReconciliation(ctx context.Context, account string) ([]ledger.BalanceCheckpoint, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT id,account_id,observed_cents,expected_cents,difference_cents,unexplained_cents,observed_at FROM balance_checkpoints WHERE (?='' OR account_id=?) ORDER BY julianday(observed_at) DESC,rowid DESC`, account, account)
 	if e != nil {
 		return nil, e
@@ -625,7 +617,7 @@ func compensateCheckpoint(ctx context.Context, tx *sql.Tx, t ledger.MoneyTransac
 	if amount < 0 {
 		amount = -amount
 	}
-	_, e = postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: t.AccountID, Amount: amount, Source: "system", Reason: "RECONCILIATION_COMPENSATION", RelatedTransactionID: t.ID}, "", -d)
+	_, e = postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: t.AccountID, Amount: amount, Source: "system", Reason: "RECONCILIATION_COMPENSATION", RelatedTransactionID: t.ID}, -d)
 	if e != nil {
 		return e
 	}

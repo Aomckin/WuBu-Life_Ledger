@@ -5,12 +5,12 @@ $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $testDirectory = Join-Path $temporaryRoot ('wubu-dogfooding-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testDirectory | Out-Null
 $binary = Join-Path $testDirectory 'wubu-test.exe'
-$variables = @('DATABASE_PATH','LISTEN_ADDR','PYTHONPATH','PYTHONIOENCODING','WUBU_TEST_BASE_URL')
+$variables = @('DATABASE_PATH','LISTEN_ADDR','PYTHONPATH','PYTHONIOENCODING','WUBU_TEST_BASE_URL','AI_BASE_URL','AI_MODEL','AI_TRANSCRIPTION_URL')
 $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $verificationProcess = $null
 try {
-    & $GoCommand build -trimpath -ldflags '-s -w -X main.version=0.4.0' -o $binary ./cmd/stockroom
+    & $GoCommand build -trimpath -ldflags '-s -w -X main.version=1.0.0-rc.2' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Integration build failed' }
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
@@ -21,6 +21,9 @@ try {
     $env:WUBU_TEST_BASE_URL = "http://127.0.0.1:$port"
     $env:PYTHONPATH = "$(Join-Path $projectRoot 'tools\wubu_tool');$ZhaoxiSource"
     $env:PYTHONIOENCODING = 'utf-8'
+    $env:AI_BASE_URL = $null
+    $env:AI_MODEL = $null
+    $env:AI_TRANSCRIPTION_URL = $null
     $verificationProcess = Start-Process -FilePath $binary -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testDirectory 'stdout.log') -RedirectStandardError (Join-Path $testDirectory 'stderr.log')
     $ready = $false
     for ($attempt=0; $attempt -lt 30; $attempt++) {
@@ -38,6 +41,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'SDK v0.3 integration failed' }
     python -B tools/wubu_tool/tests/integration_v04.py
     if ($LASTEXITCODE -ne 0) { throw 'SDK v0.4 integration failed' }
+    python -B tools/wubu_tool/tests/integration_v10.py
+    if ($LASTEXITCODE -ne 0) { throw 'SDK v1 integration failed' }
 } finally {
     if ($verificationProcess -and -not $verificationProcess.HasExited) { Stop-Process -InputObject $verificationProcess }
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }

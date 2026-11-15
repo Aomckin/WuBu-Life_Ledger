@@ -25,8 +25,8 @@ func moneyWhere(f ledger.MoneyFilter, includeVoided bool) (string, []any, error)
 		args = append(args, f.ToAccount)
 	}
 	if f.ItemID != "" {
-		where += ` AND (EXISTS(SELECT 1 FROM purchase_items l WHERE l.purchase_event_id=m.purchase_event_id AND l.item_id=?) OR EXISTS(SELECT 1 FROM maintenance_events me WHERE me.id=m.maintenance_event_id AND me.item_id=?) OR (m.type='REFUND' AND EXISTS(SELECT 1 FROM money_transactions original JOIN maintenance_events me ON me.id=original.maintenance_event_id WHERE original.id=m.related_transaction_id AND me.item_id=?)))`
-		args = append(args, f.ItemID, f.ItemID, f.ItemID)
+		where += ` AND EXISTS(SELECT 1 FROM transaction_items i WHERE i.transaction_id=m.id AND i.item_key=?)`
+		args = append(args, f.ItemID)
 	}
 	if f.Type != "" {
 		switch f.Type {
@@ -48,17 +48,19 @@ func (s *Store) Transactions(ctx context.Context, f ledger.MoneyFilter) ([]ledge
 	for i := range cols {
 		cols[i] = "m." + cols[i]
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+strings.Join(cols, ",")+` FROM money_transactions m WHERE `+where+` ORDER BY julianday(m.occurred_at) DESC,m.rowid DESC LIMIT ? OFFSET ?`, args...)
+	rows, e := s.db.QueryContext(ctx, `SELECT `+strings.Join(cols, ",")+`,CASE WHEN m.type='EXPENSE' AND m.voided_at='' THEN m.amount_cents-COALESCE((SELECT SUM(x.amount_cents) FROM money_transactions x WHERE x.type='REFUND' AND x.voided_at='' AND x.related_transaction_id=m.id),0) END FROM money_transactions m WHERE `+where+` ORDER BY julianday(m.occurred_at) DESC,m.rowid DESC LIMIT ? OFFSET ?`, args...)
 	if e != nil {
 		return nil, e
 	}
 	defer rows.Close()
 	out := []ledger.MoneyTransaction{}
 	for rows.Next() {
-		t, e := scanMoney(rows)
+		var remaining *ledger.Money
+		t, e := scanMoney(rows, &remaining)
 		if e != nil {
 			return nil, e
 		}
+		t.RefundableAmount = remaining
 		out = append(out, t)
 	}
 	return out, rows.Err()
@@ -92,27 +94,14 @@ func (s *Store) MoneySummary(ctx context.Context, f ledger.MoneyFilter) (ledger.
 	}
 	var rows *sql.Rows
 	if expr == "item" {
-		itemWhere := where
-		itemArgs := append([]any{}, args...)
 		if f.ItemID != "" {
-			itemWhere += " AND l.item_id=?"
-			itemArgs = append(itemArgs, f.ItemID)
+			where += " AND i.item_key=?"
+			args = append(args, f.ItemID)
 		}
-		query := `WITH allocation AS (
-        SELECT COALESCE(NULLIF(l.item_id,''),l.raw_name) AS item_key,
-        (CASE m.type WHEN 'REFUND' THEN -1 ELSE 1 END)*m.amount_cents*CASE WHEN p.item_total_cents>0 THEN 1.0*l.subtotal_cents/p.item_total_cents ELSE 1.0/(SELECT COUNT(*) FROM purchase_items WHERE purchase_event_id=p.id) END AS amount,
-        m.id AS event_id FROM money_transactions m JOIN purchase_events p ON p.id=m.purchase_event_id JOIN purchase_items l ON l.purchase_event_id=p.id WHERE m.type IN ('EXPENSE','REFUND') AND p.deleted_at IS NULL AND ` + itemWhere + `
-        UNION ALL
-        SELECT me.item_id,(CASE m.type WHEN 'REFUND' THEN -m.amount_cents ELSE m.amount_cents END),m.id
-        FROM money_transactions m JOIN maintenance_events me ON me.id=CASE WHEN m.type='REFUND' THEN (SELECT maintenance_event_id FROM money_transactions original WHERE original.id=m.related_transaction_id) ELSE m.maintenance_event_id END
-        WHERE m.type IN ('EXPENSE','REFUND') AND ` + where + `
-        UNION ALL
-        SELECT '未关联物品',(CASE m.type WHEN 'REFUND' THEN -m.amount_cents ELSE m.amount_cents END),m.id FROM money_transactions m
-        WHERE m.purchase_event_id='' AND m.maintenance_event_id='' AND NOT EXISTS(SELECT 1 FROM money_transactions original WHERE original.id=m.related_transaction_id AND original.maintenance_event_id<>'') AND m.type IN ('EXPENSE','REFUND') AND ` + where + `
-        ) SELECT item_key,CAST(ROUND(SUM(amount)) AS INTEGER),COUNT(DISTINCT event_id) FROM allocation GROUP BY item_key ORDER BY 2 DESC`
-		allArgs := append(itemArgs, args...)
-		allArgs = append(allArgs, args...)
-		rows, e = s.db.QueryContext(ctx, query, allArgs...)
+		rows, e = s.db.QueryContext(ctx, `SELECT COALESCE(i.item_key,'未关联物品'),
+ CAST(ROUND(SUM(CASE m.type WHEN 'REFUND' THEN -m.amount_cents ELSE m.amount_cents END * COALESCE(i.share,1))) AS INTEGER),
+ COUNT(DISTINCT m.id) FROM money_transactions m LEFT JOIN transaction_items i ON i.transaction_id=m.id
+ WHERE m.type IN ('EXPENSE','REFUND') AND `+where+` GROUP BY 1 ORDER BY 2 DESC`, args...)
 	} else {
 		rows, e = s.db.QueryContext(ctx, `SELECT `+expr+`,SUM(CASE m.type WHEN 'REFUND' THEN -m.amount_cents ELSE m.amount_cents END),COUNT(*) FROM money_transactions m WHERE m.type IN ('EXPENSE','REFUND') AND `+where+` GROUP BY `+expr+` ORDER BY 2 DESC`, args...)
 	}
@@ -129,7 +118,7 @@ func (s *Store) MoneySummary(ctx context.Context, f ledger.MoneyFilter) (ledger.
 	}
 	return out, rows.Err()
 }
-func (s *Store) MoneyCategories(ctx context.Context) ([]string, error) {
+func (s FinanceRepository) MoneyCategories(ctx context.Context) ([]string, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT name FROM money_categories UNION SELECT category FROM money_transactions ORDER BY 1`)
 	if e != nil {
 		return nil, e
@@ -151,7 +140,7 @@ type CategoryInput struct {
 	PreviousName string `json:"previous_name,omitempty"`
 }
 
-func (s *Store) SaveMoneyCategory(ctx context.Context, key string, p CategoryInput) (CategoryInput, bool, error) {
+func (s FinanceRepository) SaveMoneyCategory(ctx context.Context, key string, p CategoryInput) (CategoryInput, bool, error) {
 	var out CategoryInput
 	r, e := s.ledgerTx(ctx, key, "money_category", p, &out, func(tx *sql.Tx) error {
 		p.Name = strings.TrimSpace(p.Name)
@@ -160,9 +149,6 @@ func (s *Store) SaveMoneyCategory(ctx context.Context, key string, p CategoryInp
 		}
 		if p.PreviousName != "" && p.PreviousName != p.Name {
 			if _, e := tx.ExecContext(ctx, `UPDATE money_transactions SET category=? WHERE category=?`, p.Name, p.PreviousName); e != nil {
-				return e
-			}
-			if _, e := tx.ExecContext(ctx, `UPDATE purchase_events SET category=? WHERE category=?`, p.Name, p.PreviousName); e != nil {
 				return e
 			}
 			if _, e := tx.ExecContext(ctx, `DELETE FROM money_categories WHERE name=?`, p.PreviousName); e != nil {

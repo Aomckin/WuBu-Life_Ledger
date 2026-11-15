@@ -45,20 +45,17 @@ func (m Money) MarshalJSON() ([]byte, error) {
 }
 
 type PurchaseInput struct {
-	ExpenseNature string         `json:"expense_nature,omitempty"`
-	AccountID     string         `json:"account_id,omitempty"`
-	Merchant      string         `json:"merchant"`
-	PurchasedAt   string         `json:"purchased_at"`
-	TotalAmount   Money          `json:"total_amount"`
-	Currency      string         `json:"currency"`
-	PaymentMethod string         `json:"payment_method"`
-	Source        string         `json:"source"`
-	ExternalID    string         `json:"external_id"`
-	Category      string         `json:"category"`
-	Discount      Money          `json:"discount"`
-	ExtraFee      Money          `json:"extra_fee"`
-	Note          string         `json:"note"`
-	Items         []PurchaseLine `json:"items"`
+	Merchant    string         `json:"merchant"`
+	PurchasedAt string         `json:"purchased_at"`
+	TotalAmount Money          `json:"total_amount"`
+	Currency    string         `json:"currency"`
+	Source      string         `json:"source"`
+	ExternalID  string         `json:"external_id"`
+	Category    string         `json:"category"`
+	Discount    Money          `json:"discount"`
+	ExtraFee    Money          `json:"extra_fee"`
+	Note        string         `json:"note"`
+	Items       []PurchaseLine `json:"items"`
 }
 type PurchaseLine struct {
 	inventory.ProductSpec
@@ -82,17 +79,11 @@ type PurchaseLine struct {
 	WarrantyUntil  string   `json:"warranty_until,omitempty"`
 }
 type Purchase struct {
-	Status         string `json:"status"`
-	RefundedAmount Money  `json:"refunded_amount"`
-	ID             string `json:"id"`
+	ID string `json:"id"`
 	PurchaseInput
-	ItemTotal        Money     `json:"item_total"`
-	CreatedAt        string    `json:"created_at"`
-	UpdatedAt        string    `json:"updated_at"`
-	PurchaseID       string    `json:"purchase_id"`
-	ExpenseAmount    Money     `json:"expense_amount"`
-	ValidationStatus string    `json:"validation_status"`
-	Warnings         []Warning `json:"warnings"`
+	ItemTotal Money  `json:"item_total"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type Warning struct {
@@ -170,38 +161,22 @@ type DurablePatch struct {
 	SerialNumber         *string `json:"serial_number"`
 	WarrantyUntil        *string `json:"warranty_until"`
 	Status               *string `json:"status"`
-	SoldAt               *string `json:"sold_at"`
-	SoldPrice            *Money  `json:"sold_price"`
 	Note                 *string `json:"note"`
 }
-type MaintenanceInput struct {
-	AccountID   string `json:"account_id,omitempty"`
-	OccurredAt  string `json:"occurred_at"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Cost        Money  `json:"cost"`
-	Status      string `json:"status"`
-	Source      string `json:"source"`
-	Note        string `json:"note"`
-}
 type Maintenance struct {
-	ID        string  `json:"id"`
-	ItemID    string  `json:"item_id"`
-	ExpenseID *string `json:"expense_id"`
-	MaintenanceInput
+	ID     string `json:"id"`
+	ItemID string `json:"item_id"`
+	Cost   Money  `json:"cost"`
+	MaintenanceRecord
 }
 type Expense struct {
-	ID                 string  `json:"id"`
-	PurchaseEventID    *string `json:"purchase_event_id"`
-	MaintenanceEventID *string `json:"maintenance_event_id"`
-	Amount             Money   `json:"amount"`
-	Currency           string  `json:"currency"`
-	Category           string  `json:"category"`
-	Merchant           string  `json:"merchant"`
-	PaymentMethod      string  `json:"payment_method"`
-	OccurredAt         string  `json:"occurred_at"`
-	Source             string  `json:"source"`
-	Note               string  `json:"note"`
+	ID         string `json:"id"`
+	Amount     Money  `json:"amount"`
+	Category   string `json:"category"`
+	Merchant   string `json:"merchant"`
+	OccurredAt string `json:"occurred_at"`
+	Source     string `json:"source"`
+	Note       string `json:"note"`
 }
 type Alias struct {
 	ID              string `json:"id"`
@@ -229,7 +204,6 @@ type Dashboard struct {
 	Accounts           []Account          `json:"accounts"`
 	ConsumableCount    int                `json:"consumable_count"`
 	TotalBalance       SignedMoney        `json:"total_balance"`
-	AvailableBalance   SignedMoney        `json:"available_balance"`
 	TodayExpense       Money              `json:"today_expense"`
 	DurableCount       int                `json:"durable_count"`
 	RecentTransactions []MoneyTransaction `json:"recent_transactions"`
@@ -274,17 +248,11 @@ func Source(s string) (string, error) {
 	return "", fmt.Errorf("%w: unsupported source", ErrInvalid)
 }
 func ValidatePurchase(p PurchaseInput) (PurchaseInput, error) {
-	switch p.ExpenseNature {
-	case "", "DAILY", "FIXED", "SETUP", "CAPITAL", "EXCEPTIONAL":
-	default:
-		return p, ErrInvalid
-	}
-
 	p.Items = append([]PurchaseLine(nil), p.Items...)
 	var e error
 	p.Merchant = strings.TrimSpace(p.Merchant)
 	p.ExternalID = strings.TrimSpace(p.ExternalID)
-	if len([]rune(p.Merchant)) > 200 || len(p.ExternalID) > 200 || len([]rune(p.Note)) > 2000 || len(p.PaymentMethod) > 100 || len(p.Category) > 100 {
+	if len([]rune(p.Merchant)) > 200 || len(p.ExternalID) > 200 || len([]rune(p.Note)) > 2000 || len(p.Category) > 100 {
 		return p, fmt.Errorf("%w: purchase text too long", ErrInvalid)
 	}
 	if p.TotalAmount < 0 || p.TotalAmount > 1e12 || p.Discount < 0 || p.ExtraFee < 0 {

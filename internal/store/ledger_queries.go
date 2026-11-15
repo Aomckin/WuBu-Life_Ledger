@@ -45,34 +45,13 @@ type purchaseReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-func (s *Store) GetPurchase(ctx context.Context, id string) (ledger.Purchase, error) {
-	return getPurchase(ctx, s.db, id)
-}
-func getPurchase(ctx context.Context, db purchaseReader, id string) (ledger.Purchase, error) {
+func getAcquisition(ctx context.Context, db purchaseReader, id string) (ledger.Purchase, error) {
 	var p ledger.Purchase
-	e := db.QueryRowContext(ctx, `SELECT id,merchant,purchased_at,total_cents,item_total_cents,discount_cents,extra_fee_cents,currency,payment_method,source,external_id,category,note,created_at,updated_at FROM purchase_events WHERE id=? AND deleted_at IS NULL`, id).Scan(&p.ID, &p.Merchant, &p.PurchasedAt, &p.TotalAmount, &p.ItemTotal, &p.Discount, &p.ExtraFee, &p.Currency, &p.PaymentMethod, &p.Source, &p.ExternalID, &p.Category, &p.Note, &p.CreatedAt, &p.UpdatedAt)
+	e := db.QueryRowContext(ctx, `SELECT id,merchant,purchased_at,total_cents,item_total_cents,discount_cents,extra_fee_cents,currency,source,external_id,category,note,created_at,updated_at FROM purchase_events WHERE id=? AND deleted_at IS NULL`, id).Scan(&p.ID, &p.Merchant, &p.PurchasedAt, &p.TotalAmount, &p.ItemTotal, &p.Discount, &p.ExtraFee, &p.Currency, &p.Source, &p.ExternalID, &p.Category, &p.Note, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(e, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}
 	if e != nil {
-		return p, e
-	}
-	if e = db.QueryRowContext(ctx, `SELECT expense_nature FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at='' ORDER BY rowid DESC LIMIT 1`, id).Scan(&p.ExpenseNature); e != nil && !errors.Is(e, sql.ErrNoRows) {
-		return p, e
-	}
-	var refunded ledger.Money
-	if e = db.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_cents),0) FROM money_transactions WHERE purchase_event_id=? AND type='REFUND' AND voided_at=''`, id).Scan(&refunded); e != nil {
-		return p, e
-	}
-	p.RefundedAmount = refunded
-	p.Status = "COMPLETED"
-	if refunded > 0 {
-		p.Status = "PARTIAL_REFUND"
-		if refunded == p.TotalAmount {
-			p.Status = "REFUNDED"
-		}
-	}
-	if e = db.QueryRowContext(ctx, `SELECT account_id FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at=''`, id).Scan(&p.AccountID); e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return p, e
 	}
 	rows, e := db.QueryContext(ctx, `SELECT l.id,COALESCE(l.item_id,''),l.raw_name,l.quantity,l.unit,l.unit_price_cents,l.subtotal_cents,l.item_type,l.confidence,l.note,COALESCE(i.category,'other'),COALESCE(i.location,''),COALESCE(d.brand,''),COALESCE(d.model,''),COALESCE(d.serial_number,''),COALESCE(d.warranty_until,''),l.spec,l.package_size,l.package_unit FROM purchase_items l LEFT JOIN items i ON i.id=l.item_id LEFT JOIN durable_details d ON d.item_id=l.item_id WHERE l.purchase_event_id=? ORDER BY l.rowid`, id)
@@ -88,10 +67,9 @@ func getPurchase(ctx context.Context, db purchaseReader, id string) (ledger.Purc
 		}
 		p.Items = append(p.Items, l)
 	}
-	ledger.DecoratePurchase(&p)
 	return p, rows.Err()
 }
-func (s *Store) Purchases(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Purchase, error) {
+func (s ItemsRepository) Acquisitions(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Purchase, error) {
 	where, args := historyWhere(f, "p.purchased_at", "p.category")
 	where += " AND p.deleted_at IS NULL"
 	if f.ItemID != "" {
@@ -120,7 +98,7 @@ func (s *Store) Purchases(ctx context.Context, f ledger.HistoryFilter) ([]ledger
 	}
 	result := []ledger.Purchase{}
 	for _, id := range ids {
-		p, e := s.GetPurchase(ctx, id)
+		p, e := s.GetAcquisition(ctx, id)
 		if e != nil {
 			return nil, e
 		}
@@ -128,7 +106,7 @@ func (s *Store) Purchases(ctx context.Context, f ledger.HistoryFilter) ([]ledger
 	}
 	return result, nil
 }
-func (s *Store) InventoryEvents(ctx context.Context, f ledger.HistoryFilter) ([]ledger.InventoryEvent, error) {
+func (s ItemsRepository) InventoryEvents(ctx context.Context, f ledger.HistoryFilter) ([]ledger.InventoryEvent, error) {
 	where, args := historyWhere(f, "occurred_at", "")
 	if f.ItemID != "" {
 		where += " AND item_id=?"
@@ -153,7 +131,7 @@ func (s *Store) InventoryEvents(ctx context.Context, f ledger.HistoryFilter) ([]
 }
 func (s *Store) PriceHistory(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Price, error) {
 	where, args := historyWhere(f, "p.purchased_at", "")
-	where += " AND p.deleted_at IS NULL AND l.item_id=?"
+	where += " AND p.deleted_at IS NULL AND (l.unit_price_cents<>0 OR l.subtotal_cents<>0) AND l.item_id=?"
 	args = append(args, f.ItemID)
 	limit, offset := page(f)
 	args = append(args, limit, offset)
@@ -172,11 +150,11 @@ func (s *Store) PriceHistory(ctx context.Context, f ledger.HistoryFilter) ([]led
 	}
 	return out, rows.Err()
 }
-func (s *Store) Expenses(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Expense, error) {
+func (s FinanceRepository) Expenses(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Expense, error) {
 	where, args := historyWhere(f, "occurred_at", "category")
 	limit, offset := page(f)
 	args = append(args, limit, offset)
-	rows, e := s.db.QueryContext(ctx, `SELECT * FROM expenses WHERE `+where+` ORDER BY julianday(occurred_at) DESC,id DESC LIMIT ? OFFSET ?`, args...)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,amount_cents,category,merchant,occurred_at,source,note FROM money_transactions WHERE type='EXPENSE' AND voided_at='' AND `+where+` ORDER BY julianday(occurred_at) DESC,id DESC LIMIT ? OFFSET ?`, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -184,20 +162,20 @@ func (s *Store) Expenses(ctx context.Context, f ledger.HistoryFilter) ([]ledger.
 	out := []ledger.Expense{}
 	for rows.Next() {
 		var v ledger.Expense
-		if e = rows.Scan(&v.ID, &v.PurchaseEventID, &v.MaintenanceEventID, &v.Amount, &v.Currency, &v.Category, &v.Merchant, &v.PaymentMethod, &v.OccurredAt, &v.Source, &v.Note); e != nil {
+		if e = rows.Scan(&v.ID, &v.Amount, &v.Category, &v.Merchant, &v.OccurredAt, &v.Source, &v.Note); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
 }
-func (s *Store) ExpenseTotal(ctx context.Context, f ledger.HistoryFilter) (ledger.Money, error) {
+func (s FinanceRepository) ExpenseTotal(ctx context.Context, f ledger.HistoryFilter) (ledger.Money, error) {
 	where, args := historyWhere(f, "occurred_at", "category")
 	var total ledger.Money
 	e := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE type WHEN 'EXPENSE' THEN amount_cents WHEN 'REFUND' THEN -amount_cents ELSE 0 END),0) FROM money_transactions WHERE voided_at='' AND `+where, args...).Scan(&total)
 	return total, e
 }
-func (s *Store) MaintenanceHistory(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Maintenance, error) {
+func (s ItemsRepository) MaintenanceHistory(ctx context.Context, f ledger.HistoryFilter) ([]ledger.Maintenance, error) {
 	where, args := historyWhere(f, "occurred_at", "")
 	if f.ItemID != "" {
 		where += " AND item_id=?"
@@ -213,14 +191,14 @@ func (s *Store) MaintenanceHistory(ctx context.Context, f ledger.HistoryFilter) 
 	out := []ledger.Maintenance{}
 	for rows.Next() {
 		var v ledger.Maintenance
-		if e = rows.Scan(&v.ID, &v.ItemID, &v.ExpenseID, &v.OccurredAt, &v.Title, &v.Description, &v.Cost, &v.Status, &v.Source, &v.Note); e != nil {
+		if e = rows.Scan(&v.ID, &v.ItemID, &v.OccurredAt, &v.Title, &v.Description, &v.Cost, &v.Status, &v.Source, &v.Note); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
 }
-func (s *Store) DurableDetails(ctx context.Context, id string) (ledger.DurableDetails, error) {
+func (s ItemsRepository) DurableDetails(ctx context.Context, id string) (ledger.DurableDetails, error) {
 	return durableDetails(ctx, s.db, id)
 }
 func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.DurablePatch) (ledger.DurableDetails, bool, error) {
@@ -248,18 +226,12 @@ func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.Dura
 			}
 		}
 		if p.Status != nil && *p.Status != d.Status {
-			input := ledger.DurableActionInput{OccurredAt: "", Source: "manual", Note: d.Note}
-			if p.SoldAt != nil {
-				input.OccurredAt = *p.SoldAt
+			if *p.Status == "SOLD" {
+				return ledger.ErrInvalid
 			}
-			if p.SoldPrice != nil {
-				input.Amount = *p.SoldPrice
-			}
-			if _, e = durableTransition(ctx, tx, id, *p.Status, input); e != nil {
+			if _, e = durableTransition(ctx, tx, id, *p.Status, ledger.DurableActionInput{Source: "manual", Note: d.Note}); e != nil {
 				return e
 			}
-		} else if p.SoldAt != nil || p.SoldPrice != nil {
-			return fmt.Errorf("%w: use sell_item for sale", ledger.ErrInvalid)
 		}
 		if p.HasOriginalPackaging != nil {
 			d.HasOriginalPackaging = p.HasOriginalPackaging
@@ -282,9 +254,6 @@ func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.Dura
 		var residence any
 		if d.ResidenceID != "" {
 			residence = d.ResidenceID
-			if _, err := scanResidence(tx.QueryRowContext(ctx, `SELECT `+residenceColumns+` FROM residences WHERE id=?`, d.ResidenceID)); err != nil {
-				return err
-			}
 		}
 		if _, e = tx.ExecContext(ctx, `UPDATE durable_details SET has_original_packaging=?,purchase_proof=?,estimated_resale_cents=?,residence_id=? WHERE item_id=?`, d.HasOriginalPackaging, d.PurchaseProof, d.EstimatedResaleValue, residence, id); e != nil {
 			return e
@@ -297,7 +266,7 @@ func (s *Store) UpdateDurable(ctx context.Context, key, id string, p ledger.Dura
 	})
 	return d, replay, e
 }
-func (s *Store) AddAlias(ctx context.Context, key, id, name string) (ledger.Alias, bool, error) {
+func (s ItemsRepository) AddAlias(ctx context.Context, key, id, name string) (ledger.Alias, bool, error) {
 	var a ledger.Alias
 	replay, e := s.ledgerTx(ctx, key, "alias:"+id, name, &a, func(tx *sql.Tx) error {
 		if _, e := getTxItem(ctx, tx, id); e != nil {
@@ -333,7 +302,7 @@ func (s *Store) AddAlias(ctx context.Context, key, id, name string) (ledger.Alia
 	})
 	return a, replay, e
 }
-func (s *Store) Aliases(ctx context.Context, id string) ([]ledger.Alias, error) {
+func (s ItemsRepository) Aliases(ctx context.Context, id string) ([]ledger.Alias, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT * FROM product_aliases WHERE item_id=? ORDER BY rowid`, id)
 	if e != nil {
 		return nil, e
@@ -349,7 +318,7 @@ func (s *Store) Aliases(ctx context.Context, id string) ([]ledger.Alias, error) 
 	}
 	return out, rows.Err()
 }
-func (s *Store) ResolveItem(ctx context.Context, name string, spec ...string) (inventory.Item, error) {
+func (s ItemsRepository) ResolveItem(ctx context.Context, name string, spec ...string) (inventory.Item, error) {
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return inventory.Item{}, e
@@ -380,7 +349,6 @@ func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, 
 	d.TotalValue = balance.TotalValue
 	d.Accounts = balance.Accounts
 	d.TotalBalance = balance.TotalBalance
-	d.AvailableBalance = balance.AvailableBalance
 	from, to, err := ledger.PeriodRange("today", "", "", time.Now())
 	if err != nil {
 		return d, err
@@ -405,7 +373,7 @@ func (s *Store) Dashboard(ctx context.Context, month string) (ledger.Dashboard, 
 		return d, e
 	}
 
-	if d.RecentPurchases, e = s.Purchases(ctx, ledger.HistoryFilter{Limit: 5}); e != nil {
+	if d.RecentPurchases, e = s.Acquisitions(ctx, ledger.HistoryFilter{Limit: 5}); e != nil {
 		return d, e
 	}
 	// Filter before LIMIT so recent consumption cannot be displaced by purchases.

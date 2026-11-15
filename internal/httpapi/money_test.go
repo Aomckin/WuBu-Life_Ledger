@@ -21,11 +21,7 @@ func TestV02HTTPRealityEvents(t *testing.T) {
 	a := create(`{"name":"微信","type":"WALLET","initial_balance":100}`, "account-a")
 	b := create(`{"name":"支付宝","type":"WALLET","initial_balance":0}`, "account-b")
 	keyedRequest(t, h, "PATCH", "/api/v1/money/settings", `{"default_payment_account":"`+a.ID+`"}`, "default", 200)
-	w := keyedRequest(t, h, "POST", "/api/v1/purchases/record", `{"items":[{"name":"可乐","spec":"2L","quantity":1,"unit":"瓶","price":5.5}]}`, "buy", 201)
-	var purchase struct {
-		PurchaseID string `json:"purchase_id"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &purchase)
+	charge := performJSON[ledger.MoneyResult](t, h, "POST", "/api/v1/money/expenses", `{"amount":5.5}`, 201).Transactions[0]
 	out := performJSON[ledger.Account](t, h, "GET", "/api/v1/money/balance?account_id="+a.ID, "", 200)
 	if out.CurrentBalance != 9450 {
 		t.Fatal(out)
@@ -36,7 +32,7 @@ func TestV02HTTPRealityEvents(t *testing.T) {
 	if retry.Header().Get("Idempotency-Replayed") != "true" {
 		t.Fatal(retry.Header())
 	}
-	keyedRequest(t, h, "POST", "/api/v1/money/refunds", `{"purchase_event_id":"`+purchase.PurchaseID+`","amount":5.5}`, "refund", 201)
+	keyedRequest(t, h, "POST", "/api/v1/finance/refunds", `{"related_transaction_id":"`+charge.ID+`","amount":5.5}`, "refund", 201)
 	sum := performJSON[ledger.MoneySummary](t, h, "GET", "/api/v1/money/expense-summary?period=month&group_by=category", "", 200)
 	if sum.NetExpense != 0 || sum.Income != 0 || sum.TransferOut != 5000 {
 		t.Fatal(sum)

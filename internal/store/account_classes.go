@@ -24,18 +24,10 @@ func accountMerchant(a ledger.Account, merchant *string) error {
 	}
 	return nil
 }
-func bindPurchaseAccount(ctx context.Context, tx *sql.Tx, p *ledger.PurchaseInput) error {
-	a, e := paymentAccountTx(ctx, tx, p.AccountID, p.PaymentMethod)
-	if e != nil {
-		return e
-	}
-	p.AccountID = a.ID
-	return accountMerchant(a, &p.Merchant)
-}
 
 // A top-up converts liquid funds to consumption value. The principal is paired
 // transfer legs; a positive difference is restricted bonus, a loss an adjustment.
-func (s *Store) TopUpAccount(ctx context.Context, key string, input ledger.TopUpInput) (ledger.MoneyResult, bool, error) {
+func (s FinanceRepository) TopUpAccount(ctx context.Context, key string, input ledger.TopUpInput) (ledger.MoneyResult, bool, error) {
 	out := ledger.MoneyResult{Transactions: []ledger.MoneyTransaction{}, Warnings: []ledger.Warning{}}
 	replay, e := s.ledgerTx(ctx, key, "top_up_account", input, &out, func(tx *sql.Tx) error {
 		if input.FromAccount == "" || input.ToAccount == "" || input.PaidAmount <= 0 || input.CreditedAmount <= 0 || input.PaidAmount > 1e12 || input.CreditedAmount > 1e12 {
@@ -57,13 +49,13 @@ func (s *Store) TopUpAccount(ctx context.Context, key string, input ledger.TopUp
 			return e
 		}
 		p := ledger.MoneyInput{AccountID: a.ID, Amount: input.PaidAmount, OccurredAt: at, Source: input.Source, Note: input.Note, Reason: "TOP_UP", Merchant: b.Merchant}
-		x, e := postMoney(ctx, tx, "TRANSFER_OUT", p, "", -ledger.SignedMoney(p.Amount))
+		x, e := postMoney(ctx, tx, "TRANSFER_OUT", p, -ledger.SignedMoney(p.Amount))
 		if e != nil {
 			return e
 		}
 		p.AccountID = b.ID
 		p.RelatedTransactionID = x.ID
-		y, e := postMoney(ctx, tx, "TRANSFER_IN", p, "", ledger.SignedMoney(p.Amount))
+		y, e := postMoney(ctx, tx, "TRANSFER_IN", p, ledger.SignedMoney(p.Amount))
 		if e != nil {
 			return e
 		}
@@ -83,7 +75,7 @@ func (s *Store) TopUpAccount(ctx context.Context, key string, input ledger.TopUp
 				p.Reason = "TOP_UP_VALUE_LOSS"
 				out.Warnings = append(out.Warnings, ledger.Warning{Code: "TOP_UP_VALUE_LOSS", Message: "到账少于实付，差额已记录为储值损失调整，不计普通消费。"})
 			}
-			z, e := postMoney(ctx, tx, kind, p, "", ledger.SignedMoney(difference))
+			z, e := postMoney(ctx, tx, kind, p, ledger.SignedMoney(difference))
 			if e != nil {
 				return e
 			}
@@ -93,7 +85,7 @@ func (s *Store) TopUpAccount(ctx context.Context, key string, input ledger.TopUp
 	})
 	return out, replay, e
 }
-func (s *Store) AccountStatistics(ctx context.Context, id string) (ledger.AccountStatistics, error) {
+func (s FinanceRepository) AccountStatistics(ctx context.Context, id string) (ledger.AccountStatistics, error) {
 	// Keep balance and lifetime aggregates in the same read snapshot.
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {

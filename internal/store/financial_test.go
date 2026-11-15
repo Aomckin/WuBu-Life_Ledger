@@ -2,9 +2,8 @@ package store
 
 import (
 	"context"
-	"encoding/json"
-	"path/filepath"
 	"stockroom/internal/ledger"
+	"stockroom/internal/links"
 	"testing"
 )
 
@@ -107,13 +106,14 @@ func TestFinancialPurchaseBackfillAndSemanticEvidence(t *testing.T) {
 	ctx := context.Background()
 	a := moneyAccount(t, s, "bank", "BANK", 10000)
 	m := moneyAction(t, s, "existing", "EXPENSE", ledger.MoneyInput{AccountID: a.ID, Amount: 6900, OccurredAt: "2026-11-01T01:00:00Z"})
-	p := ledger.PurchaseInput{AccountID: a.ID, Merchant: "拼多多", PurchasedAt: "2026-11-01T01:00:00Z", TotalAmount: 6900, Currency: "CNY", Source: "agent", Category: "food", Items: []ledger.PurchaseLine{{Name: "无糖可乐", Quantity: 6, Unit: "瓶", Subtotal: 6900, UnitPrice: 1150, ItemType: ledger.Consumable}}}
-	purchase, replay, e := s.CreatePurchaseFromTransaction(ctx, "backfill", m.Transactions[0].ID, p)
+	p := ledger.AcquisitionInput{Items: []ledger.AcquisitionLine{{Name: "无糖可乐", Quantity: 6, Unit: "瓶"}}}
+	result, replay, e := links.Backfill(ctx, s.Items(), s.Finance(), s, "backfill", m.Transactions[0].ID, p)
+	purchase := result.Acquisition
 	if e != nil || replay {
 		t.Fatal(purchase, e)
 	}
 	balanceIs(t, s, a.ID, 3100)
-	_, replay, e = s.CreatePurchaseFromTransaction(ctx, "backfill", m.Transactions[0].ID, p)
+	_, replay, e = links.Backfill(ctx, s.Items(), s.Finance(), s, "backfill", m.Transactions[0].ID, p)
 	if e != nil || !replay {
 		t.Fatal(replay, e)
 	}
@@ -164,114 +164,6 @@ func TestFinancialRepeatedCheckpointKeepsUnexplained(t *testing.T) {
 	}
 }
 
-func TestFinancialSchema12UpgradeRestart(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "schema12.db")
-	s, e := Open(path)
-	if e != nil {
-		t.Fatal(e)
-	}
-	a := moneyAccount(t, s, "migration", "BANK", 100000)
-	p := samplePurchase()
-	p.AccountID = a.ID
-	purchase := mustPurchase(t, s, "legacy-key", p)
-	// Remove only new empty tables to reproduce the schema-12 boundary.
-	for _, table := range []string{"financial_reviews", "financial_event_links", "raw_financial_events", "transaction_annotations", "balance_checkpoints", "financial_settings", "semantic_evidence", "merchant_rules"} {
-		if _, e = s.db.Exec(`DROP TABLE ` + table); e != nil {
-			t.Fatal(e)
-		}
-	}
-	if _, e = s.db.Exec(`PRAGMA user_version=12`); e != nil {
-		t.Fatal(e)
-	}
-	if e = s.Close(); e != nil {
-		t.Fatal(e)
-	}
-	for i := 0; i < 2; i++ {
-		s, e = Open(path)
-		if e != nil {
-			t.Fatal(e)
-		}
-		var version int
-		if e = s.db.QueryRow(`PRAGMA user_version`).Scan(&version); e != nil || version != 14 {
-			t.Fatal(version, e)
-		}
-		old, e := s.GetPurchase(ctx, purchase.ID)
-		if e != nil || old.TotalAmount != purchase.TotalAmount {
-			t.Fatal(old, e)
-		}
-		replay, r, e := s.RecordPurchase(ctx, "legacy-key", p)
-		if e != nil || !r || replay.ID != purchase.ID {
-			t.Fatal(replay, r, e)
-		}
-		balanceIs(t, s, a.ID, 100000-int64(p.TotalAmount))
-		if e = s.Close(); e != nil {
-			t.Fatal(e)
-		}
-	}
-}
-func TestFinancialCSVPreviewMatchesReconciliationWithoutWrites(t *testing.T) {
-	s := ledgerDB(t)
-	ctx := context.Background()
-	a := moneyAccount(t, s, "preview", "BANK", 10000)
-	amount := ledger.Money(550)
-	_, _, e := s.CaptureFinancial(ctx, "manual-record", ledger.RawFinancialInput{Provider: "WECHAT", CaptureSource: "MANUAL", AccountID: a.ID, Amount: &amount, Direction: "EXPENSE", OccurredAt: "2026-11-02T04:00:00Z", MerchantRaw: "商家", ExternalID: "wx-one", RawText: "已支付 ¥5.50"})
-	if e != nil {
-		t.Fatal(e)
-	}
-	p := MoneyImportInput{Adapter: "wechat", AccountID: a.ID, CSV: "occurred_at,type,amount,merchant,external_id\n2026-11-02T04:00:00Z,EXPENSE,5.50,商家,wx-one"}
-	preview, e := s.PreviewMoneyImport(ctx, p)
-	if e != nil || preview.Duplicates != 1 || preview.Imported != 0 || preview.NeedsReview != 0 {
-		t.Fatal(preview, e)
-	}
-	countTable(t, s, "raw_financial_events", 1)
-	countTable(t, s, "financial_event_links", 1)
-	balanceIs(t, s, a.ID, 9450)
-	for _, key := range []string{"a", "b"} {
-		moneyAction(t, s, key, "EXPENSE", ledger.MoneyInput{AccountID: a.ID, Amount: 300, Merchant: "水店", OccurredAt: "2026-11-02T05:00:00Z"})
-	}
-	p.CSV = "occurred_at,type,amount,merchant,external_id\n2026-11-02T05:00:00Z,EXPENSE,3.00,水店,wx-two"
-	preview, e = s.PreviewMoneyImport(ctx, p)
-	if e != nil || preview.NeedsReview != 1 || preview.Imported != 0 || preview.Duplicates != 0 {
-		t.Fatal(preview, e)
-	}
-	countTable(t, s, "raw_financial_events", 3)
-	balanceIs(t, s, a.ID, 8850)
-	result, _, e := s.ImportMoney(ctx, "csv", p)
-	if e != nil || result.NeedsReview != preview.NeedsReview || result.Imported != preview.Imported || result.Duplicates != preview.Duplicates {
-		t.Fatal(result, e)
-	}
-	countTable(t, s, "raw_financial_events", 4)
-	balanceIs(t, s, a.ID, 8850)
-}
-func TestFinancialCSVRetainsCompleteMultilineSkippedEvidence(t *testing.T) {
-	s := ledgerDB(t)
-	ctx := context.Background()
-	a := moneyAccount(t, s, "evidence", "BANK", 10000)
-	header := "交易时间,交易类型,交易对方,商品,收/支,金额(元),支付方式,当前状态,交易单号\r\n"
-	record := "2026/11/2 12:00,退款,测试商家,\"第一行\r\n第二行\",收入,5.50,零钱,退款成功,refund-evidence\r\n"
-	p := MoneyImportInput{Adapter: "wechat", AccountID: a.ID, CSV: header + record}
-	result, _, e := s.ImportMoney(ctx, "multiline-evidence", p)
-	if e != nil || result.Skipped != 1 {
-		t.Fatal(result, e)
-	}
-	rows, e := s.RawFinancialEvents(ctx, "")
-	if e != nil || len(rows) != 1 || rows[0].RawText != record {
-		t.Fatal(rows, e)
-	}
-	var payload struct {
-		Header []string `json:"header"`
-		Values []string `json:"values"`
-	}
-	if e = json.Unmarshal([]byte(rows[0].RawPayload), &payload); e != nil {
-		t.Fatal(e)
-	}
-	if len(payload.Header) != 9 || len(payload.Values) != 9 || payload.Values[3] != "第一行\n第二行" {
-		t.Fatal(payload)
-	}
-	balanceIs(t, s, a.ID, 10000)
-	countTable(t, s, "money_transactions", 1)
-}
 func TestFinancialBackfillPreservesCheckpointAcrossZero(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
@@ -295,7 +187,7 @@ func TestFinancialBackfillPreservesCheckpointAcrossZero(t *testing.T) {
 			if e != nil || cp[0].UnexplainedAmount != tc.afterIncome {
 				t.Fatal(cp, e)
 			}
-			if _, replay, e := s.MoneyAction(ctx, "late-income", "INCOME", input); e != nil || !replay {
+			if _, replay, e := s.Finance().Record(ctx, "late-income", "INCOME", input); e != nil || !replay {
 				t.Fatal(replay, e)
 			}
 			moneyAction(t, s, "late-expense", "EXPENSE", ledger.MoneyInput{AccountID: a.ID, Amount: tc.expense, OccurredAt: "2026-11-01T05:00:00Z"})

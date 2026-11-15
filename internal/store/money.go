@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 )
 
 const accountColumns = `id,name,type,currency,balance_cents,credit_limit_cents,active,note,created_at,updated_at,account_class,merchant`
-const transactionColumns = `id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,purchase_event_id,maintenance_event_id,related_transaction_id,external_id,occurred_at,source,note,reason,created_at,voided_at,expense_nature`
+const transactionColumns = `id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,related_transaction_id,external_id,occurred_at,source,note,reason,created_at,voided_at,expense_nature`
 
 func scanAccount(r scanner) (ledger.Account, error) {
 	var a ledger.Account
@@ -30,9 +29,9 @@ func scanAccount(r scanner) (ledger.Account, error) {
 	}
 	return a, e
 }
-func scanMoney(r scanner) (ledger.MoneyTransaction, error) {
+func scanMoney(r scanner, extra ...any) (ledger.MoneyTransaction, error) {
 	var t ledger.MoneyTransaction
-	e := r.Scan(&t.ID, &t.AccountID, &t.Type, &t.Amount, &t.BalanceDelta, &t.BalanceBefore, &t.BalanceAfter, &t.Category, &t.Merchant, &t.PurchaseEventID, &t.MaintenanceEventID, &t.RelatedTransactionID, &t.ExternalID, &t.OccurredAt, &t.Source, &t.Note, &t.Reason, &t.CreatedAt, &t.VoidedAt, &t.ExpenseNature)
+	e := r.Scan(append([]any{&t.ID, &t.AccountID, &t.Type, &t.Amount, &t.BalanceDelta, &t.BalanceBefore, &t.BalanceAfter, &t.Category, &t.Merchant, &t.RelatedTransactionID, &t.ExternalID, &t.OccurredAt, &t.Source, &t.Note, &t.Reason, &t.CreatedAt, &t.VoidedAt, &t.ExpenseNature}, extra...)...)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = ErrNotFound
 	}
@@ -56,10 +55,10 @@ func accountTx(ctx context.Context, tx *sql.Tx, id string) (ledger.Account, erro
 	}
 	return a, nil
 }
-func (s *Store) GetAccount(ctx context.Context, id string) (ledger.Account, error) {
+func (s FinanceRepository) GetAccount(ctx context.Context, id string) (ledger.Account, error) {
 	return scanAccount(s.db.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=? OR name=?`, id, id))
 }
-func (s *Store) Accounts(ctx context.Context, filters ...ledger.AccountFilter) ([]ledger.Account, error) {
+func (s FinanceRepository) Accounts(ctx context.Context, filters ...ledger.AccountFilter) ([]ledger.Account, error) {
 	where, args := "1=1", []any{}
 	if len(filters) > 0 {
 		f := filters[0]
@@ -97,7 +96,7 @@ func (s *Store) Accounts(ctx context.Context, filters ...ledger.AccountFilter) (
 	}
 	return out, rows.Err()
 }
-func (s *Store) Balances(ctx context.Context) (ledger.BalanceSummary, error) {
+func (s FinanceRepository) Balances(ctx context.Context) (ledger.BalanceSummary, error) {
 	a, e := s.Accounts(ctx)
 	out := ledger.BalanceSummary{Currency: "CNY", Accounts: a}
 	for _, v := range a {
@@ -113,11 +112,10 @@ func (s *Store) Balances(ctx context.Context) (ledger.BalanceSummary, error) {
 			}
 		}
 	}
-	out.AvailableBalance = out.LiquidBalance
 	out.TotalValue = out.LiquidBalance + out.ConsumptionBalance
 	return out, e
 }
-func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountInput) (ledger.Account, bool, error) {
+func (s FinanceRepository) CreateAccount(ctx context.Context, key string, p ledger.AccountInput) (ledger.Account, bool, error) {
 	var out ledger.Account
 	replay, e := s.ledgerTx(ctx, key, "create_account", p, &out, func(tx *sql.Tx) error {
 		p.Name = strings.TrimSpace(p.Name)
@@ -163,7 +161,7 @@ func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountI
 		if amount < 0 {
 			amount = -amount
 		}
-		_, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: id, Amount: amount, Source: "system", Reason: "INITIAL_BALANCE"}, "", p.InitialBalance)
+		_, e := postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: id, Amount: amount, Source: "system", Reason: "INITIAL_BALANCE"}, p.InitialBalance)
 		if e != nil {
 			return e
 		}
@@ -172,7 +170,7 @@ func (s *Store) CreateAccount(ctx context.Context, key string, p ledger.AccountI
 	})
 	return out, replay, e
 }
-func (s *Store) PatchAccount(ctx context.Context, key, id string, p ledger.AccountPatch) (ledger.Account, bool, error) {
+func (s FinanceRepository) PatchAccount(ctx context.Context, key, id string, p ledger.AccountPatch) (ledger.Account, bool, error) {
 	var out ledger.Account
 	r, e := s.ledgerTx(ctx, key, "patch_account:"+id, p, &out, func(tx *sql.Tx) error {
 		a, e := scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=?`, id))
@@ -235,12 +233,12 @@ func (s *Store) PatchAccount(ctx context.Context, key, id string, p ledger.Accou
 	})
 	return out, r, e
 }
-func (s *Store) MoneySettings(ctx context.Context) (ledger.MoneySettings, error) {
+func (s FinanceRepository) MoneySettings(ctx context.Context) (ledger.MoneySettings, error) {
 	var p ledger.MoneySettings
 	e := s.db.QueryRowContext(ctx, `SELECT default_payment_account FROM money_settings WHERE id=1`).Scan(&p.DefaultPaymentAccount)
 	return p, e
 }
-func (s *Store) SetMoneySettings(ctx context.Context, key string, p ledger.MoneySettings) (ledger.MoneySettings, bool, error) {
+func (s FinanceRepository) SetMoneySettings(ctx context.Context, key string, p ledger.MoneySettings) (ledger.MoneySettings, bool, error) {
 	var out ledger.MoneySettings
 	r, e := s.ledgerTx(ctx, key, "money_settings", p, &out, func(tx *sql.Tx) error {
 		out = p
@@ -258,7 +256,7 @@ func (s *Store) SetMoneySettings(ctx context.Context, key string, p ledger.Money
 }
 
 // postMoney records before/after and updates the balance within the caller's reality event transaction.
-func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput, maintenance string, delta ledger.SignedMoney) (ledger.MoneyTransaction, error) {
+func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput, delta ledger.SignedMoney) (ledger.MoneyTransaction, error) {
 	var out ledger.MoneyTransaction
 	if !validNature(p.ExpenseNature) {
 		return out, ledger.ErrInvalid
@@ -302,8 +300,8 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 		p.Category = "other"
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	out = ledger.MoneyTransaction{ID: uuid.NewString(), AccountID: a.ID, Type: kind, Amount: p.Amount, BalanceDelta: delta, BalanceBefore: a.CurrentBalance, BalanceAfter: a.CurrentBalance + delta, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.PurchaseEventID, MaintenanceEventID: maintenance, RelatedTransactionID: p.RelatedTransactionID, ExternalID: p.ExternalID, OccurredAt: at, Source: source, Note: p.Note, Reason: p.Reason, CreatedAt: now, ExpenseNature: p.ExpenseNature}
-	_, e = tx.ExecContext(ctx, `INSERT INTO money_transactions(`+transactionColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, out.AccountID, out.Type, out.Amount, out.BalanceDelta, out.BalanceBefore, out.BalanceAfter, out.Category, out.Merchant, out.PurchaseEventID, out.MaintenanceEventID, out.RelatedTransactionID, out.ExternalID, out.OccurredAt, out.Source, out.Note, out.Reason, out.CreatedAt, out.VoidedAt, out.ExpenseNature)
+	out = ledger.MoneyTransaction{ID: uuid.NewString(), AccountID: a.ID, Type: kind, Amount: p.Amount, BalanceDelta: delta, BalanceBefore: a.CurrentBalance, BalanceAfter: a.CurrentBalance + delta, Category: p.Category, Merchant: p.Merchant, RelatedTransactionID: p.RelatedTransactionID, ExternalID: p.ExternalID, OccurredAt: at, Source: source, Note: p.Note, Reason: p.Reason, CreatedAt: now, ExpenseNature: p.ExpenseNature}
+	_, e = tx.ExecContext(ctx, `INSERT INTO money_transactions(`+transactionColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, out.ID, out.AccountID, out.Type, out.Amount, out.BalanceDelta, out.BalanceBefore, out.BalanceAfter, out.Category, out.Merchant, out.RelatedTransactionID, out.ExternalID, out.OccurredAt, out.Source, out.Note, out.Reason, out.CreatedAt, out.VoidedAt, out.ExpenseNature)
 	if e != nil {
 		return out, e
 	}
@@ -314,41 +312,18 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 	e = compensateCheckpoint(ctx, tx, out)
 	return out, e
 }
-func paymentAccountTx(ctx context.Context, tx *sql.Tx, id, method string) (ledger.Account, error) {
-	if id == "" && method != "" {
-		var found string
-		e := tx.QueryRowContext(ctx, `SELECT id FROM accounts WHERE name=?`, method).Scan(&found)
-		if e == nil {
-			id = found
-		} else if !errors.Is(e, sql.ErrNoRows) {
-			return ledger.Account{}, e
-		}
-	}
-	return accountTx(ctx, tx, id)
-}
-func purchasePayment(ctx context.Context, tx *sql.Tx, p *ledger.Purchase) (ledger.MoneyTransaction, error) {
-	account, e := paymentAccountTx(ctx, tx, p.AccountID, p.PaymentMethod)
-	if e != nil {
-		return ledger.MoneyTransaction{}, e
-	}
-	p.AccountID = account.ID
-	t, e := postMoney(ctx, tx, "EXPENSE", ledger.MoneyInput{AccountID: p.AccountID, ExpenseNature: p.ExpenseNature, Amount: p.TotalAmount, Category: p.Category, Merchant: p.Merchant, PurchaseEventID: p.ID, OccurredAt: p.PurchasedAt, Source: p.Source, Note: p.Note}, "", -ledger.SignedMoney(p.TotalAmount))
-	if e != nil {
-		return t, e
-	}
-	p.AccountID = t.AccountID
-	p.Status = "COMPLETED"
-	_, e = tx.ExecContext(ctx, `UPDATE money_transactions SET payment_method=? WHERE id=?`, p.PaymentMethod, t.ID)
-	return t, e
-}
-func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.MoneyInput) (ledger.MoneyResult, bool, error) {
+func (s FinanceRepository) Record(ctx context.Context, key, kind string, p ledger.MoneyInput) (ledger.MoneyResult, bool, error) {
 	out := ledger.MoneyResult{Transactions: []ledger.MoneyTransaction{}}
-	r, e := s.ledgerTx(ctx, key, "money:"+kind, p, &out, func(tx *sql.Tx) error {
+	operation := "money:" + kind
+	if kind == "REFUND" {
+		operation = "finance:refund"
+	}
+	r, e := s.ledgerTx(ctx, key, operation, p, &out, func(tx *sql.Tx) error {
 		if kind != "ADJUSTMENT" && p.Amount <= 0 {
 			return fmt.Errorf("%w: amount must be positive", ledger.ErrInvalid)
 		}
-		if kind != "REFUND" && (p.PurchaseEventID != "" || p.RelatedTransactionID != "" || len(p.ReturnItems) > 0) {
-			return fmt.Errorf("%w: links/returns are only accepted for refunds", ledger.ErrInvalid)
+		if kind != "REFUND" && p.RelatedTransactionID != "" {
+			return fmt.Errorf("%w: related_transaction_id is only accepted for refunds", ledger.ErrInvalid)
 		}
 		if kind != "ADJUSTMENT" && p.ActualBalance != nil {
 			return ledger.ErrInvalid
@@ -370,13 +345,13 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 				return fmt.Errorf("%w: accounts must differ", ledger.ErrInvalid)
 			}
 			p.AccountID = a.ID
-			x, e := postMoney(ctx, tx, "TRANSFER_OUT", p, "", -ledger.SignedMoney(p.Amount))
+			x, e := postMoney(ctx, tx, "TRANSFER_OUT", p, -ledger.SignedMoney(p.Amount))
 			if e != nil {
 				return e
 			}
 			p.AccountID = b.ID
 			p.RelatedTransactionID = x.ID
-			y, e := postMoney(ctx, tx, "TRANSFER_IN", p, "", ledger.SignedMoney(p.Amount))
+			y, e := postMoney(ctx, tx, "TRANSFER_IN", p, ledger.SignedMoney(p.Amount))
 			if e != nil {
 				return e
 			}
@@ -414,7 +389,6 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 					return e
 				}
 				p.RelatedTransactionID = original.ID
-				p.PurchaseEventID = original.PurchaseEventID
 				p.Category = original.Category
 				p.Merchant = original.Merchant
 				if p.AccountID == "" {
@@ -448,23 +422,13 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 				}
 				evidence = &raw
 			}
-			t, e := postMoney(ctx, tx, kind, p, "", delta)
+			t, e := postMoney(ctx, tx, kind, p, delta)
 			if e != nil {
 				return e
 			}
 			if evidence != nil {
 				if e = linkRawTx(ctx, tx, evidence, t.ID, "PRIMARY"); e != nil {
 					return e
-				}
-			}
-			if kind == "REFUND" {
-				if e = returnStock(ctx, tx, t, p.ReturnItems); e != nil {
-					return e
-				}
-				if t.PurchaseEventID != "" {
-					if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET updated_at=? WHERE id=?`, nextPurchaseVersion(t.CreatedAt), t.PurchaseEventID); e != nil {
-						return e
-					}
 				}
 			}
 			if kind == "ADJUSTMENT" {
@@ -487,96 +451,18 @@ func (s *Store) MoneyAction(ctx context.Context, key, kind string, p ledger.Mone
 	return out, r, e
 }
 func refundOriginal(ctx context.Context, tx *sql.Tx, p ledger.MoneyInput) (ledger.MoneyTransaction, error) {
-	var t ledger.MoneyTransaction
-	var e error
-	if p.RelatedTransactionID != "" {
-		t, e = scanMoney(tx.QueryRowContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE id=?`, p.RelatedTransactionID))
-	} else if p.PurchaseEventID != "" {
-		t, e = scanMoney(tx.QueryRowContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at=''`, p.PurchaseEventID))
-	} else {
-		return t, fmt.Errorf("%w: refund needs purchase_event_id or related_transaction_id", ledger.ErrInvalid)
+	if p.RelatedTransactionID == "" {
+		return ledger.MoneyTransaction{}, fmt.Errorf("%w: refund needs related_transaction_id", ledger.ErrInvalid)
 	}
+	t, e := scanMoney(tx.QueryRowContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE id=?`, p.RelatedTransactionID))
 	if e != nil {
 		return t, e
 	}
 	if t.Reason == "DEPOSIT_LOSS" || t.Reason == "RECEIVABLE_LOSS" {
 		return t, ledger.ErrConflict
 	}
-	if t.Type != "EXPENSE" || t.VoidedAt != "" || p.PurchaseEventID != "" && t.PurchaseEventID != p.PurchaseEventID {
+	if t.Type != "EXPENSE" || t.VoidedAt != "" {
 		return t, ledger.ErrConflict
 	}
 	return t, nil
-}
-func returnStock(ctx context.Context, tx *sql.Tx, t ledger.MoneyTransaction, lines []ledger.ReturnItem) error {
-	seen := map[string]bool{}
-	for _, l := range lines {
-		if t.PurchaseEventID == "" || l.ItemID == "" || seen[l.ItemID] || l.Quantity <= 0 || math.IsNaN(l.Quantity) || math.IsInf(l.Quantity, 0) || math.Abs(l.Quantity*1000-math.Round(l.Quantity*1000)) > 0.0001 {
-			return ledger.ErrInvalid
-		}
-		seen[l.ItemID] = true
-		var purchased, returned float64
-		if e := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(quantity),0) FROM purchase_items WHERE purchase_event_id=? AND item_id=?`, t.PurchaseEventID, l.ItemID).Scan(&purchased); e != nil {
-			return e
-		}
-		if e := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(quantity),0) FROM refund_returns WHERE purchase_event_id=? AND item_id=?`, t.PurchaseEventID, l.ItemID).Scan(&returned); e != nil {
-			return e
-		}
-		if l.Quantity+returned > purchased+0.00001 {
-			return fmt.Errorf("%w: return exceeds purchased quantity", ledger.ErrConflict)
-		}
-		item, e := getTxItem(ctx, tx, l.ItemID)
-		if e != nil {
-			return e
-		}
-		if item.ItemType == ledger.Durable {
-			if l.Quantity != 1 {
-				return ledger.ErrInvalid
-			}
-			if _, e = durableTransition(ctx, tx, l.ItemID, "RETIRED", ledger.DurableActionInput{OccurredAt: t.OccurredAt, Source: t.Source, Note: "退款退回物品"}); e != nil {
-				return e
-			}
-		} else {
-			delta := -l.Quantity
-			if _, e = mutateInventory(ctx, tx, l.ItemID, "ADJUST", ledger.InventoryInput{Delta: &delta, OccurredAt: t.OccurredAt, Source: t.Source, Note: "退款退回库存"}, &t.PurchaseEventID); e != nil {
-				return e
-			}
-		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO refund_returns VALUES(?,?,?,?)`, t.ID, t.PurchaseEventID, l.ItemID, l.Quantity); e != nil {
-			return e
-		}
-	}
-	return nil
-}
-
-// Corrections compensate the old balance delta and replace only the statistical entry.
-func correctPurchaseMoney(ctx context.Context, tx *sql.Tx, before ledger.Purchase, after *ledger.Purchase) error {
-	t, e := scanMoney(tx.QueryRowContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE purchase_event_id=? AND type='EXPENSE' AND voided_at=''`, before.ID))
-	if e != nil {
-		return e
-	}
-	var refunds int
-	if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM money_transactions WHERE type='REFUND' AND related_transaction_id=?`, t.ID).Scan(&refunds); e != nil {
-		return e
-	}
-	if refunds > 0 {
-		return fmt.Errorf("%w: refunded purchase cannot be amended or cancelled", ledger.ErrConflict)
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, e = tx.ExecContext(ctx, `UPDATE money_transactions SET voided_at=? WHERE id=?`, now, t.ID); e != nil {
-		return e
-	}
-	if _, e = postMoney(ctx, tx, "ADJUSTMENT", ledger.MoneyInput{AccountID: t.AccountID, Amount: t.Amount, RelatedTransactionID: t.ID, PurchaseEventID: t.PurchaseEventID, Source: "system", Reason: "PURCHASE_CORRECTION"}, "", -t.BalanceDelta); e != nil {
-		return e
-	}
-	if after != nil {
-		if after.AccountID == "" {
-			after.AccountID = before.AccountID
-		}
-		var replacement ledger.MoneyTransaction
-		replacement, e = purchasePayment(ctx, tx, after)
-		if e == nil {
-			_, e = tx.ExecContext(ctx, `INSERT INTO residence_cost_links(transaction_id,residence_id,role) SELECT ?,residence_id,role FROM residence_cost_links WHERE transaction_id=?`, replacement.ID, t.ID)
-		}
-	}
-	return e
 }

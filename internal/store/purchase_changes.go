@@ -34,10 +34,10 @@ func nextPurchaseVersion(previous string) string {
 
 // AmendPurchase applies net stock differences, never rolls the stock back to its
 // original purchase-time quantity. Later consumption therefore remains intact.
-func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.PurchaseAmendment) (ledger.Purchase, bool, error) {
+func (s ItemsRepository) amendPurchase(ctx context.Context, key, id string, input ledger.PurchaseAmendment) (ledger.Purchase, bool, error) {
 	var out ledger.Purchase
-	replay, err := s.ledgerTx(ctx, key, "amend_purchase:"+id, input, &out, func(tx *sql.Tx) error {
-		before, e := getPurchase(ctx, tx, id)
+	replay, err := s.ledgerTx(ctx, key, "items:amend:"+id, input, &out, func(tx *sql.Tx) error {
+		before, e := getAcquisition(ctx, tx, id)
 		if e != nil {
 			return e
 		}
@@ -46,15 +46,6 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 		}
 		p, e := ledger.ValidatePurchase(input.PurchaseInput)
 		if e != nil {
-			return e
-		}
-		if p.ExpenseNature == "" {
-			p.ExpenseNature = before.ExpenseNature
-		}
-		if p.AccountID == "" {
-			p.AccountID = before.AccountID
-		}
-		if e = bindPurchaseAccount(ctx, tx, &p); e != nil {
 			return e
 		}
 		if p.Source != before.Source || p.ExternalID != before.ExternalID {
@@ -80,22 +71,19 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 				return fmt.Errorf("%w: 已关联库存的商品不能直接更换物品或类型，请移除该行后新增。", ledger.ErrConflict)
 			}
 			line.ItemID = old.ItemID
+			line.UnitPrice, line.Subtotal, line.Confidence = old.UnitPrice, old.Subtotal, old.Confidence
 		}
 		if e = applyDueTx(ctx, tx); e != nil {
 			return e
 		}
 		now := nextPurchaseVersion(before.UpdatedAt)
-		out = ledger.Purchase{ID: id, PurchaseInput: p, CreatedAt: before.CreatedAt, UpdatedAt: now}
-		for _, line := range p.Items {
-			out.ItemTotal += line.Subtotal
-		}
+		out = ledger.Purchase{ID: id, PurchaseInput: p, CreatedAt: before.CreatedAt, UpdatedAt: now, ItemTotal: before.ItemTotal}
+		out.TotalAmount, out.Discount, out.ExtraFee = before.TotalAmount, before.Discount, before.ExtraFee
+		out.Category = before.Category
 		if e = reconcilePurchaseStock(ctx, tx, before, out.Items, out.PurchasedAt, now); e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET merchant=?,purchased_at=?,total_cents=?,item_total_cents=?,discount_cents=?,extra_fee_cents=?,currency=?,payment_method=?,category=?,note=?,updated_at=? WHERE id=?`, p.Merchant, p.PurchasedAt, p.TotalAmount, out.ItemTotal, p.Discount, p.ExtraFee, p.Currency, p.PaymentMethod, p.Category, p.Note, now, id); e != nil {
-			return e
-		}
-		if e = correctPurchaseMoney(ctx, tx, before, &out); e != nil {
+		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET merchant=?,purchased_at=?,note=?,updated_at=? WHERE id=?`, p.Merchant, p.PurchasedAt, p.Note, now, id); e != nil {
 			return e
 		}
 		if _, e = tx.ExecContext(ctx, `DELETE FROM purchase_items WHERE purchase_event_id=?`, id); e != nil {
@@ -111,9 +99,6 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 				return e
 			}
 		}
-		if e = refreshPurchasePrices(ctx, tx, before.Items, out.Items); e != nil {
-			return e
-		}
 		if e = completePurchase(ctx, tx, &out); e != nil {
 			return e
 		}
@@ -124,10 +109,10 @@ func (s *Store) AmendPurchase(ctx context.Context, key, id string, input ledger.
 
 // DeletePurchase cancels the purchase in the ledger while retaining its audit
 // trail and original identity. It does not purge inventory history.
-func (s *Store) DeletePurchase(ctx context.Context, key, id string, input ledger.PurchaseDeletion) (ledger.PurchaseDeletionResult, bool, error) {
+func (s ItemsRepository) deletePurchase(ctx context.Context, key, id string, input ledger.PurchaseDeletion) (ledger.PurchaseDeletionResult, bool, error) {
 	out := ledger.PurchaseDeletionResult{ID: id, Deleted: true}
-	replay, err := s.ledgerTx(ctx, key, "delete_purchase:"+id, input, &out, func(tx *sql.Tx) error {
-		before, e := getPurchase(ctx, tx, id)
+	replay, err := s.ledgerTx(ctx, key, "items:delete:"+id, input, &out, func(tx *sql.Tx) error {
+		before, e := getAcquisition(ctx, tx, id)
 		if e != nil {
 			return e
 		}
@@ -141,13 +126,7 @@ func (s *Store) DeletePurchase(ctx context.Context, key, id string, input ledger
 		if e = reconcilePurchaseStock(ctx, tx, before, nil, before.PurchasedAt, now); e != nil {
 			return e
 		}
-		if e = correctPurchaseMoney(ctx, tx, before, nil); e != nil {
-			return e
-		}
 		if _, e = tx.ExecContext(ctx, `UPDATE purchase_events SET deleted_at=?,updated_at=? WHERE id=?`, now, now, id); e != nil {
-			return e
-		}
-		if e = refreshPurchasePrices(ctx, tx, before.Items, nil); e != nil {
 			return e
 		}
 		return recordPurchaseRevision(ctx, tx, before, out, "DELETE", now)
@@ -279,23 +258,6 @@ func reconcilePurchaseStock(ctx context.Context, tx *sql.Tx, before ledger.Purch
 			if e = addDurableEvent(ctx, tx, id, "RETIRED", "ACTIVE", "RETIRED", item.Location, now, "manual", "撤销购买"); e != nil {
 				return e
 			}
-		}
-	}
-	return nil
-}
-
-func refreshPurchasePrices(ctx context.Context, tx *sql.Tx, before, after []ledger.PurchaseLine) error {
-	ids := map[string]bool{}
-	for _, lines := range [][]ledger.PurchaseLine{before, after} {
-		for _, line := range lines {
-			if line.ItemID != "" {
-				ids[line.ItemID] = true
-			}
-		}
-	}
-	for id := range ids {
-		if _, e := tx.ExecContext(ctx, `UPDATE items SET unit_price_cents=(SELECT l.unit_price_cents FROM purchase_items l JOIN purchase_events p ON p.id=l.purchase_event_id WHERE l.item_id=? AND p.deleted_at IS NULL ORDER BY julianday(p.purchased_at) DESC,p.rowid DESC,l.rowid DESC LIMIT 1) WHERE id=?`, id, id); e != nil {
-			return e
 		}
 	}
 	return nil

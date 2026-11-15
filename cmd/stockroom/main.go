@@ -17,7 +17,7 @@ import (
 	"stockroom/internal/store"
 )
 
-var version = "0.4.0"
+var version = "1.0.0-rc.2"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {

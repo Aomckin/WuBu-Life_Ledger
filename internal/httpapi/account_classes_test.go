@@ -33,8 +33,8 @@ func TestV021HTTPAccountClasses(t *testing.T) {
 		t.Fatal(list)
 	}
 	keyedRequest(t, h, "PATCH", "/api/v1/money/settings", `{"default_payment_account":"`+b.ID+`"}`, "default", 200)
-	mismatch := `{"merchant":"麦当劳","total":20,"items":[{"name":"奶茶","quantity":1,"unit":"杯","price":20}]}`
-	w = keyedRequest(t, h, "POST", "/api/v1/purchases/record", mismatch, "wrong-merchant", 409)
+	mismatch := `{"merchant":"麦当劳","amount":20}`
+	w = keyedRequest(t, h, "POST", "/api/v1/money/expenses", mismatch, "wrong-merchant", 409)
 	var response map[string]any
 	json.Unmarshal(w.Body.Bytes(), &response)
 	if response["error"].(map[string]any)["code"] != "ACCOUNT_MERCHANT_MISMATCH" {

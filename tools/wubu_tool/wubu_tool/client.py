@@ -5,29 +5,21 @@ from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 ROUTES = {
-    "record_purchase": ("POST", "/purchases/record"),
-    "validate_purchase": ("POST", "/purchases/validate"),
-    "record_purchase_event": ("POST", "/purchases"),
-    "amend_purchase_event": ("PUT", "/purchases/{purchase_id}"),
-    "delete_purchase_event": ("DELETE", "/purchases/{purchase_id}"),
     "consume_item": ("POST", "/items/{item_id}/consume"),
     "adjust_inventory": ("POST", "/items/{item_id}/adjust"),
     "open_item": ("POST", "/items/{item_id}/open"),
     "finish_item": ("POST", "/items/{item_id}/finish"),
     "discard_item": ("POST", "/items/{item_id}/discard"),
-    "add_maintenance_event": ("POST", "/items/{item_id}/maintenance"),
     "add_product_alias": ("POST", "/items/{item_id}/aliases"),
     "update_durable_details": ("PATCH", "/items/{item_id}/durable"),
     "search_items": ("GET", "/items"),
     "resolve_item": ("GET", "/items/resolve"),
     "get_item": ("GET", "/items/{item_id}"),
     "get_inventory": ("GET", "/inventory"),
-    "get_purchase_history": ("GET", "/items/{item_id}/purchases"),
+    "get_purchase_history": ("GET", "/items/{item_id}/acquisitions"),
     "get_price_history": ("GET", "/items/{item_id}/prices"),
     "get_maintenance_history": ("GET", "/items/{item_id}/maintenance"),
     "get_inventory_history": ("GET", "/items/{item_id}/inventory-events"),
-    "get_recent_purchases": ("GET", "/purchases"),
-    "get_purchase_event": ("GET", "/purchases/{purchase_id}"),
     "get_expenses": ("GET", "/expenses"),
     "get_ledger_summary": ("GET", "/ledger/summary"),
     "get_durable_details": ("GET", "/items/{item_id}/durable"),
@@ -38,14 +30,14 @@ ROUTES.update({
  "update_account":("PATCH","/accounts/{account_id}"),"get_account_statistics":("GET","/accounts/{account_id}/statistics"),
  "create_account":("POST","/accounts"), "set_default_payment_account":("PATCH","/money/settings"),
  "record_income":("POST","/money/income"),"record_expense":("POST","/money/expenses"),
- "transfer_money":("POST","/money/transfers"),"record_refund":("POST","/money/refunds"),
+ "transfer_money":("POST","/money/transfers"),
  "adjust_balance":("POST","/money/adjustments"),"reconcile_account":("POST","/money/reconcile"),
  "get_accounts":("GET","/accounts"),"get_balance":("GET","/money/balance"),
  "get_account_balance":("GET","/money/balance"),"get_total_balance":("GET","/money/balance"),
  "get_expense_summary":("GET","/money/expense-summary"),"get_income_summary":("GET","/money/income-summary"),
  "get_category_summary":("GET","/money/category-summary"),"get_merchant_summary":("GET","/money/merchant-summary"),
- "get_recent_transactions":("GET","/money/transactions"),"add_maintenance":("POST","/items/{item_id}/maintenance"),
- "sell_item":("POST","/items/{item_id}/sell"),"retire_item":("POST","/items/{item_id}/retire"),
+ "get_recent_transactions":("GET","/money/transactions"),
+ "retire_item":("POST","/items/{item_id}/retire"),
  "move_item":("POST","/items/{item_id}/move"),"set_durable_status":("POST","/items/{item_id}/status"),
  "get_durable_items":("GET","/durables"),"get_item_total_cost":("GET","/items/{item_id}/total-cost"),
 })
@@ -53,7 +45,23 @@ ROUTES.update({'create_planned_cashflow': ('POST', '/planned-cashflows'), 'updat
 ROUTES.update({'create_residence': ('POST', '/residences'), 'update_residence': ('PUT', '/residences/{residence_id}'), 'get_residences': ('GET', '/residences'), 'link_residence_cost': ('POST', '/residences/{residence_id}/cost-links'), 'get_residence_cost': ('GET', '/residences/{residence_id}/cost'), 'get_relocation_cost': ('GET', '/residences/{residence_id}/relocation-cost'), 'get_residence_durables': ('GET', '/residences/{residence_id}/durables'), 'record_deposit': ('POST', '/deposits'), 'return_deposit': ('POST', '/deposits/{claim_id}/return'), 'forfeit_deposit': ('POST', '/deposits/{claim_id}/forfeit'), 'get_deposits': ('GET', '/deposits'), 'create_receivable': ('POST', '/receivables'), 'settle_receivable': ('POST', '/receivables/{claim_id}/return'), 'cancel_receivable': ('POST', '/receivables/{claim_id}/forfeit'), 'get_receivables': ('GET', '/receivables'), 'get_consumption_forecast': ('GET', '/items/{item_id}/consumption-forecast'), 'get_items_running_low': ('GET', '/items-running-low')})
 ROUTES.update({action+"_by_name": ("POST", "/items/"+action) for action in ("consume", "adjust", "open", "finish", "discard")})
 
-ROUTES.update({'find_transactions_near_time': ('GET', '/financial/transactions'), 'get_unannotated_transactions': ('GET', '/financial/transactions'), 'annotate_transaction': ('PUT', '/financial/transactions/{transaction_id}/annotation'), 'get_financial_inbox': ('GET', '/financial/inbox'), 'get_raw_financial_events': ('GET', '/financial/events'), 'review_financial_match': ('POST', '/financial/events/{raw_event_id}/review'), 'get_account_reconciliation': ('GET', '/financial/reconciliation'), 'capture_financial_event': ('POST', '/financial/events'), 'create_merchant_rule': ('POST', '/financial/merchant-rules'), 'update_merchant_rule': ('PUT', '/financial/merchant-rules/{rule_id}'), 'create_purchase_from_transaction': ('POST', '/financial/transactions/{transaction_id}/purchase'), 'attach_semantic_evidence': ('POST', '/financial/semantic-evidence'), 'get_semantic_evidence': ('GET', '/financial/semantic-evidence'), 'get_merchant_rules': ('GET', '/financial/merchant-rules'), 'get_financial_settings': ('GET', '/financial/settings'), 'set_financial_settings': ('PATCH', '/financial/settings')})
+ROUTES.update({'find_transactions_near_time': ('GET', '/financial/transactions'), 'get_unannotated_transactions': ('GET', '/financial/transactions'), 'annotate_transaction': ('PUT', '/financial/transactions/{transaction_id}/annotation'), 'get_financial_inbox': ('GET', '/financial/inbox'), 'get_raw_financial_events': ('GET', '/financial/events'), 'review_financial_match': ('POST', '/financial/events/{raw_event_id}/review'), 'get_account_reconciliation': ('GET', '/financial/reconciliation'), 'capture_financial_event': ('POST', '/financial/events'), 'create_merchant_rule': ('POST', '/financial/merchant-rules'), 'update_merchant_rule': ('PUT', '/financial/merchant-rules/{rule_id}'),  'attach_semantic_evidence': ('POST', '/financial/semantic-evidence'), 'get_semantic_evidence': ('GET', '/financial/semantic-evidence'), 'get_merchant_rules': ('GET', '/financial/merchant-rules'), 'get_financial_settings': ('GET', '/financial/settings'), 'set_financial_settings': ('PATCH', '/financial/settings')})
+
+ROUTES.update({
+    "record_acquisition": ('POST', '/acquisitions'),
+    "list_acquisitions": ("GET", "/acquisitions"),
+    "get_acquisition": ('GET', '/acquisitions/{purchase_id}'),
+    "amend_acquisition": ('PUT', '/acquisitions/{purchase_id}'),
+    "delete_acquisition": ('DELETE', '/acquisitions/{purchase_id}'),
+    "backfill_acquisition": ('POST', '/financial/transactions/{transaction_id}/acquisition'),
+    "record_maintenance": ('POST', '/items/{item_id}/events/maintenance'),
+    "record_sale": ('POST', '/items/{item_id}/events/sale'),
+    "record_return": ('POST', '/items/{item_id}/events/return'),
+    "record_finance_refund": ('POST', '/finance/refunds'),
+    "link_transaction": ('POST', '/links'),
+    "list_domain_links": ('GET', '/links'),
+    "unlink_transaction": ('DELETE', '/links/{link_id}'),
+})
 
 class WubuError(Exception):
     def __init__(self, message, code="network_error", unknown_outcome=False, detail=None):
@@ -72,18 +80,18 @@ class WubuClient:
         self.base_url = base_url.rstrip("/") + "/api/v1"
         self.timeout = float(timeout)
 
-    def call(self, operation, *, raw_event_id=None, rule_id=None, item_id=None, purchase_id=None, account_id=None, cashflow_id=None, transaction_id=None, residence_id=None, claim_id=None, payload=None, query=None, idempotency_key=None):
+    def call(self, operation, *, raw_event_id=None, rule_id=None, item_id=None, purchase_id=None, account_id=None, cashflow_id=None, transaction_id=None, residence_id=None, claim_id=None, link_id=None, payload=None, query=None, idempotency_key=None):
         if operation not in ROUTES:
             raise ValueError("unsupported operation")
         method, path = ROUTES[operation]
         if operation == "get_unannotated_transactions":
             query = {**(query or {}), "unannotated_only": True}
-        for name, value in [("raw_event_id",raw_event_id),("rule_id",rule_id),("residence_id", residence_id), ("claim_id", claim_id), ("cashflow_id", cashflow_id), ("transaction_id", transaction_id), ("item_id", item_id), ("purchase_id", purchase_id), ("account_id", account_id)]:
+        for name, value in [("raw_event_id",raw_event_id),("rule_id",rule_id),("residence_id", residence_id), ("claim_id", claim_id), ("cashflow_id", cashflow_id), ("transaction_id", transaction_id), ("item_id", item_id), ("purchase_id", purchase_id), ("account_id", account_id), ("link_id", link_id)]:
             if "{" + name + "}" in path:
                 if not value:
                     raise ValueError(name + " required")
                 path = path.replace("{" + name + "}", quote(str(value), safe=""))
-        write = method != "GET" and operation != "validate_purchase"
+        write = method != "GET"
         if write and (not idempotency_key or len(idempotency_key) > 200 or idempotency_key.strip() != idempotency_key):
             raise ValueError("关键写入必须提供稳定的 idempotency_key；重试时使用原 key 和原 payload")
         if method == "GET" and payload is not None:

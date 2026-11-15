@@ -2,11 +2,7 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"stockroom/internal/ledger"
 	"sync"
@@ -46,7 +42,7 @@ func TestV021AccountClassesTopUpAndConsumption(t *testing.T) {
 		t.Fatal(sums)
 	}
 	balance, _ := s.Balances(ctx)
-	if balance.LiquidBalance != 40000 || balance.AvailableBalance != 40000 || balance.ConsumptionBalance != 11000 || balance.TotalValue != 51000 {
+	if balance.LiquidBalance != 40000 || balance.ConsumptionBalance != 11000 || balance.TotalValue != 51000 {
 		t.Fatal(balance)
 	}
 	filtered, e := s.Accounts(ctx, ledger.AccountFilter{AccountClass: ledger.ConsumptionAccount, Merchant: "茶颜悦色"})
@@ -57,15 +53,11 @@ func TestV021AccountClassesTopUpAndConsumption(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	purchase := mustPurchase(t, s, "milk-tea", ledger.PurchaseInput{TotalAmount: 2000, Items: []ledger.PurchaseLine{{Name: "奶茶", Quantity: 1, Unit: "杯", UnitPrice: 2000, Subtotal: 2000, ItemType: ledger.Untracked}}})
-	if purchase.Merchant != "茶颜悦色" || purchase.AccountID != b.ID {
-		t.Fatal(purchase)
+	charge := moneyAction(t, s, "milk-tea", "EXPENSE", ledger.MoneyInput{Amount: 2000}).Transactions[0]
+	if charge.Merchant != "茶颜悦色" || charge.AccountID != b.ID {
+		t.Fatal(charge)
 	}
 	balanceIs(t, s, b.ID, 9000)
-	saved, _ := s.GetPurchase(ctx, purchase.ID)
-	if saved.Merchant != "茶颜悦色" {
-		t.Fatal(saved)
-	}
 	sums, _ = s.MoneySummary(ctx, ledger.MoneyFilter{})
 	if sums.NetExpense != 2000 || sums.Income != 0 {
 		t.Fatal(sums)
@@ -74,9 +66,9 @@ func TestV021AccountClassesTopUpAndConsumption(t *testing.T) {
 	if e != nil || stats.TopUpPrincipal != 10000 || stats.Bonus != 1000 || stats.Expense != 2000 || stats.CurrentBalance != 9000 || stats.BonusRatio != 0.1 {
 		t.Fatal(stats, e)
 	}
-	moneyAction(t, s, "refund", "REFUND", ledger.MoneyInput{PurchaseEventID: purchase.ID, Amount: 1000})
+	moneyAction(t, s, "refund", "REFUND", ledger.MoneyInput{RelatedTransactionID: charge.ID, Amount: 1000})
 	balanceIs(t, s, b.ID, 10000)
-	moneyAction(t, s, "refund-to-wallet", "REFUND", ledger.MoneyInput{PurchaseEventID: purchase.ID, Amount: 1000, AccountID: a.ID})
+	moneyAction(t, s, "refund-to-wallet", "REFUND", ledger.MoneyInput{RelatedTransactionID: charge.ID, Amount: 1000, AccountID: a.ID})
 	balanceIs(t, s, a.ID, 41000)
 	balanceIs(t, s, b.ID, 10000)
 	stats, e = s.AccountStatistics(ctx, b.ID)
@@ -140,7 +132,7 @@ func TestV021TopUpAtomicRetryLossAndBonus(t *testing.T) {
 	balanceIs(t, s, b.ID, 30000)
 	balanceIs(t, s, a.ID, 20000)
 	moneyAction(t, s, "bonus-only", "BONUS", ledger.MoneyInput{AccountID: b.ID, Amount: 500})
-	if _, _, e = s.MoneyAction(ctx, "cash-bonus", "BONUS", ledger.MoneyInput{AccountID: a.ID, Amount: 500}); !errors.Is(e, ledger.ErrInvalid) {
+	if _, _, e = s.Finance().Record(ctx, "cash-bonus", "BONUS", ledger.MoneyInput{AccountID: a.ID, Amount: 500}); !errors.Is(e, ledger.ErrInvalid) {
 		t.Fatal(e)
 	}
 	summary, _ := s.MoneySummary(ctx, ledger.MoneyFilter{})
@@ -188,11 +180,7 @@ func TestV021ClassEditingMismatchAndDeactivation(t *testing.T) {
 		t.Fatal("class edit rewrote transactions")
 	}
 	s.SetMoneySettings(ctx, "default", ledger.MoneySettings{DefaultPaymentAccount: a.ID})
-	p := ledger.PurchaseInput{Merchant: "麦当劳", TotalAmount: 2000, Items: []ledger.PurchaseLine{{Name: "饮品", Quantity: 1, Unit: "杯", Subtotal: 2000, UnitPrice: 2000}}}
-	if _, e = s.ValidatePurchase(ctx, p); !errors.Is(e, ledger.ErrAccountMerchantMismatch) {
-		t.Fatal(e)
-	}
-	if _, _, e = s.RecordPurchase(ctx, "mismatch", p); !errors.Is(e, ledger.ErrAccountMerchantMismatch) {
+	if _, _, e = s.Finance().Record(ctx, "mismatch", "EXPENSE", ledger.MoneyInput{Merchant: "麦当劳", Amount: 2000}); !errors.Is(e, ledger.ErrAccountMerchantMismatch) {
 		t.Fatal(e)
 	}
 	balanceIs(t, s, a.ID, 7300)
@@ -213,123 +201,4 @@ func TestV021ClassEditingMismatchAndDeactivation(t *testing.T) {
 		t.Fatal(e)
 	}
 	reconcileAll(t, s)
-}
-func snapshotV02(t *testing.T, db *sql.DB, query string) string {
-	t.Helper()
-	rows, e := db.Query(query)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer rows.Close()
-	cols, _ := rows.Columns()
-	out := [][]any{}
-	for rows.Next() {
-		v := make([]any, len(cols))
-		ptr := make([]any, len(cols))
-		for i := range v {
-			ptr[i] = &v[i]
-		}
-		if e = rows.Scan(ptr...); e != nil {
-			t.Fatal(e)
-		}
-		out = append(out, v)
-	}
-	if e = rows.Err(); e != nil {
-		t.Fatal(e)
-	}
-	b, e := json.Marshal(out)
-	if e != nil {
-		t.Fatal(e)
-	}
-	return string(b)
-}
-func TestV021MigrationPreservesV02AndRestart(t *testing.T) {
-	ctx := context.Background()
-	file := filepath.Join(t.TempDir(), "upgrade.db")
-	db, e := sql.Open("sqlite", file)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer db.Close()
-	fixture, e := os.ReadFile("testdata/v01.sql")
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = db.Exec(string(fixture)); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = db.Exec(`INSERT INTO items(id,name,category,icon,quantity,unit,created_at,updated_at,item_type) VALUES('old-item','耳机','other','inventory_2',1,'个','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','DURABLE');
- INSERT INTO purchase_events VALUES('old-purchase','商家','2026-10-01T00:00:00Z',50000,50000,0,0,'CNY','支付宝','manual','','other','','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z');
- INSERT INTO purchase_items VALUES('old-line','old-purchase','old-item','耳机',1,'个',50000,50000,'DURABLE',NULL,'');
- INSERT INTO durable_details(item_id,purchase_date,status,brand) VALUES('old-item','2026-10-01T00:00:00Z','ACTIVE','品牌');
- INSERT INTO inventory_events VALUES('old-stock','old-item','PURCHASE',1,0,1,'old-purchase','2026-10-01T00:00:00Z','manual','原购买');
- INSERT INTO maintenance_events VALUES('old-maintenance','old-item',NULL,'2026-10-02T00:00:00Z','维修','',6500,'DONE','manual','');
- INSERT INTO expenses VALUES('old-expense','old-purchase',NULL,50000,'CNY','other','商家','支付宝','2026-10-01T00:00:00Z','manual','');
- INSERT INTO expenses VALUES('old-maint-expense',NULL,'old-maintenance',6500,'CNY','maintenance','','微信','2026-10-02T00:00:00Z','manual','');
- UPDATE maintenance_events SET expense_id='old-maint-expense' WHERE id='old-maintenance';`); e != nil {
-		t.Fatal(e)
-	}
-	old := &Store{db: db}
-	if e = old.ensureColumn(ctx, "purchase_events", "deleted_at", `ALTER TABLE purchase_events ADD COLUMN deleted_at TEXT`); e != nil {
-		t.Fatal(e)
-	}
-	if e = old.migrateProducts(ctx); e != nil {
-		t.Fatal(e)
-	}
-	if e = old.migrateMoney(ctx); e != nil {
-		t.Fatal(e)
-	}
-	// Seed v0.2 account and import history in the temporary database only.
-	if _, e = db.Exec(`INSERT INTO accounts VALUES('old-wallet','旧微信','WALLET','CNY',11300,NULL,1,'旧余额','2026-10-09T00:00:00Z','2026-10-09T00:00:00Z');
- INSERT INTO money_transactions(id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,occurred_at,source,reason,created_at) VALUES('opening','old-wallet','ADJUSTMENT',10000,10000,0,10000,'2026-10-09T00:00:00Z','system','INITIAL_BALANCE','2026-10-09T00:00:00Z');
- INSERT INTO money_transactions(id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,occurred_at,source,external_id,created_at) VALUES('imported','old-wallet','INCOME',1300,1300,10000,11300,'2026-10-09T01:00:00Z','import','old-import','2026-10-09T01:00:00Z');`); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = db.Exec(`INSERT INTO money_transactions(id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,purchase_event_id,related_transaction_id,occurred_at,source,created_at)
- SELECT 'old-refund',m.account_id,'REFUND',100,100,a.balance_cents,a.balance_cents+100,m.category,m.merchant,m.purchase_event_id,m.id,'2026-10-09T02:00:00Z','manual','2026-10-09T02:00:00Z' FROM money_transactions m JOIN accounts a ON a.id=m.account_id WHERE m.type='EXPENSE' AND m.purchase_event_id<>'' LIMIT 1;
- UPDATE accounts SET balance_cents=balance_cents+100 WHERE id='unknown';
- INSERT INTO idempotency_keys VALUES('old-import-key','money_import','old-hash','{"imported":1}','2026-10-09T01:00:00Z');`); e != nil {
-		t.Fatal(e)
-	}
-	queries := map[string]string{"accounts": "SELECT rowid,id,name,type,currency,balance_cents,credit_limit_cents,active,note,created_at,updated_at FROM accounts ORDER BY rowid"}
-	for _, table := range []string{"money_transactions", "purchase_events", "purchase_items", "items", "inventory_events", "durable_details", "durable_events", "maintenance_events", "refund_returns", "idempotency_keys", "money_settings"} {
-		queries[table] = "SELECT rowid,* FROM " + table + " ORDER BY rowid"
-	}
-	// Compare all original columns; v0.3 adds expense_nature without rewriting history.
-	queries["money_transactions"] = "SELECT rowid,id,account_id,type,amount_cents,delta_cents,before_cents,after_cents,category,merchant,purchase_event_id,maintenance_event_id,related_transaction_id,external_id,occurred_at,source,note,reason,created_at,voided_at,payment_method FROM money_transactions ORDER BY rowid"
-	queries["durable_details"] = "SELECT rowid,item_id,brand,model,serial_number,purchase_date,warranty_until,status,sold_at,sold_price_cents,note FROM durable_details ORDER BY rowid"
-	before := map[string]string{}
-	for name, q := range queries {
-		before[name] = snapshotV02(t, db, q)
-	}
-	db.Close()
-	for i := 0; i < 2; i++ {
-		upgraded, e := Open(file)
-		if e != nil {
-			t.Fatal(e)
-		}
-		defer upgraded.Close()
-		for name, q := range queries {
-			if got := snapshotV02(t, upgraded.db, q); got != before[name] {
-				t.Fatalf("migration changed %s", name)
-			}
-		}
-		accounts, e := upgraded.Accounts(ctx)
-		if e != nil {
-			t.Fatal(e)
-		}
-		for _, a := range accounts {
-			if a.AccountClass != ledger.StorageAccount {
-				t.Fatal(a)
-			}
-		}
-		var version, foreign int
-		upgraded.db.QueryRow(`PRAGMA user_version`).Scan(&version)
-		upgraded.db.QueryRow(`PRAGMA foreign_keys`).Scan(&foreign)
-		if version != 14 || foreign != 1 {
-			t.Fatal(version, foreign)
-		}
-		reconcileAll(t, upgraded)
-		upgraded.Close()
-	}
 }

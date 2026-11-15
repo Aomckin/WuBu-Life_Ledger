@@ -110,25 +110,19 @@ func durableTransition(ctx context.Context, tx *sql.Tx, id, status string, p led
 		return d, e
 	}
 	if status == "SOLD" {
-		if p.Amount <= 0 || p.Amount > 1e12 {
-			return d, fmt.Errorf("%w: sale requires positive amount", ledger.ErrInvalid)
-		}
-		if _, e = postMoney(ctx, tx, "INCOME", ledger.MoneyInput{AccountID: p.AccountID, Amount: p.Amount, Category: "sale", OccurredAt: at, Source: source, Note: p.Note, Reason: "DURABLE_SALE:" + id}, "", ledger.SignedMoney(p.Amount)); e != nil {
-			return d, e
-		}
 		d.SoldAt = at
-		price := p.Amount
-		d.SoldPrice = &price
+
 	}
-	_, e = tx.ExecContext(ctx, `UPDATE durable_details SET status=?,sold_at=?,sold_price_cents=? WHERE item_id=?`, status, d.SoldAt, d.SoldPrice, id)
+	_, e = tx.ExecContext(ctx, `UPDATE durable_details SET status=?,sold_at=? WHERE item_id=?`, status, d.SoldAt, id)
 	if e != nil {
 		return d, e
 	}
 	return durableDetails(ctx, tx, id)
 }
-func (s *Store) DurableAction(ctx context.Context, key, id, action string, p ledger.DurableActionInput) (ledger.DurableDetails, bool, error) {
+
+func (s ItemsRepository) durableAction(ctx context.Context, key, operation, id, action string, p ledger.DurableActionInput) (ledger.DurableDetails, bool, error) {
 	var out ledger.DurableDetails
-	r, e := s.ledgerTx(ctx, key, "durable_action:"+action+":"+id, p, &out, func(tx *sql.Tx) error {
+	r, e := s.ledgerTx(ctx, key, operation+":"+action+":"+id, p, &out, func(tx *sql.Tx) error {
 		if action == "move" {
 			d, e := durableDetails(ctx, tx, id)
 			if e != nil {
@@ -165,6 +159,9 @@ func (s *Store) DurableAction(ctx context.Context, key, id, action string, p led
 		case "retire":
 			status = "RETIRED"
 		case "status":
+			if status == "SOLD" {
+				return ledger.ErrInvalid
+			}
 		default:
 			return ledger.ErrInvalid
 		}
@@ -174,7 +171,7 @@ func (s *Store) DurableAction(ctx context.Context, key, id, action string, p led
 	})
 	return out, r, e
 }
-func (s *Store) DurableEvents(ctx context.Context, f ledger.HistoryFilter) ([]ledger.DurableEvent, error) {
+func (s ItemsRepository) DurableEvents(ctx context.Context, f ledger.HistoryFilter) ([]ledger.DurableEvent, error) {
 	where, args := historyWhere(f, "occurred_at", "")
 	where += " AND item_id=?"
 	args = append(args, f.ItemID)
@@ -201,7 +198,7 @@ type DurableRow struct {
 	Details ledger.DurableDetails `json:"details"`
 }
 
-func (s *Store) Durables(ctx context.Context, status, location, search string, f ledger.HistoryFilter) ([]DurableRow, error) {
+func (s ItemsRepository) Durables(ctx context.Context, status, location, search string, f ledger.HistoryFilter) ([]DurableRow, error) {
 	where, args := historyWhere(f, "d.purchase_date", "")
 	where += " AND i.item_type='DURABLE'"
 	if status != "" {
@@ -259,21 +256,24 @@ func (s *Store) ItemCost(ctx context.Context, id string, f ledger.HistoryFilter)
 	where, args := historyWhere(f, "p.purchased_at", "")
 	where += " AND l.item_id=? AND p.deleted_at IS NULL"
 	args = append(args, id)
-	e := s.db.QueryRowContext(ctx, `SELECT COALESCE(CAST(ROUND(SUM(CASE WHEN p.item_total_cents>0 THEN 1.0*l.subtotal_cents*p.total_cents/p.item_total_cents ELSE 1.0*p.total_cents/(SELECT COUNT(*) FROM purchase_items WHERE purchase_event_id=p.id) END)) AS INTEGER),0),COUNT(DISTINCT p.id),COALESCE(SUM(l.quantity),0) FROM purchase_items l JOIN purchase_events p ON p.id=l.purchase_event_id WHERE `+where, args...).Scan(&out.PurchaseCost, &out.PurchaseCount, &out.PurchaseQuantity)
+	e := s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT p.id),COALESCE(SUM(l.quantity),0)
+ FROM purchase_items l JOIN purchase_events p ON p.id=l.purchase_event_id WHERE `+where, args...).Scan(&out.PurchaseCount, &out.PurchaseQuantity)
 	if e != nil {
 		return out, e
 	}
 	where, args = historyWhere(f, "occurred_at", "")
 	where += " AND item_id=? AND status='DONE'"
 	args = append(args, id)
-	if e = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(cost_cents),0),COUNT(*) FROM maintenance_events WHERE `+where, args...).Scan(&out.MaintenanceCost, &out.MaintenanceCount); e != nil {
+	if e = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM maintenance_events WHERE `+where, args...).Scan(&out.MaintenanceCount); e != nil {
 		return out, e
 	}
 	where, args = historyWhere(f, "m.occurred_at", "")
-	where += ` AND m.type='REFUND' AND m.voided_at='' AND (EXISTS(SELECT 1 FROM purchase_items l WHERE l.purchase_event_id=m.purchase_event_id AND l.item_id=?) OR EXISTS(SELECT 1 FROM money_transactions original JOIN maintenance_events me ON me.id=original.maintenance_event_id WHERE original.id=m.related_transaction_id AND me.item_id=?))`
-	args = append(args, id, id)
-	// Purchase refunds are allocated by original item share, maintenance refunds wholly to the item.
-	e = s.db.QueryRowContext(ctx, `SELECT COALESCE(CAST(ROUND(SUM(CASE WHEN m.purchase_event_id<>'' THEN m.amount_cents*COALESCE((SELECT SUM(CASE WHEN p.item_total_cents>0 THEN 1.0*l.subtotal_cents/p.item_total_cents ELSE 1.0/(SELECT COUNT(*) FROM purchase_items WHERE purchase_event_id=p.id) END) FROM purchase_items l JOIN purchase_events p ON p.id=l.purchase_event_id WHERE l.purchase_event_id=m.purchase_event_id AND l.item_id=?),0) ELSE m.amount_cents END)) AS INTEGER),0) FROM money_transactions m WHERE `+where, append([]any{id}, args...)...).Scan(&out.Refund)
+	where += " AND m.voided_at='' AND i.item_key=?"
+	e = s.db.QueryRowContext(ctx, `SELECT
+ COALESCE(CAST(ROUND(SUM(CASE WHEN m.type='EXPENSE' AND i.kind='PURCHASE' THEN m.amount_cents*i.share ELSE 0 END)) AS INTEGER),0),
+ COALESCE(CAST(ROUND(SUM(CASE WHEN m.type='EXPENSE' AND i.kind='MAINTENANCE' THEN m.amount_cents*i.share ELSE 0 END)) AS INTEGER),0),
+ COALESCE(CAST(ROUND(SUM(CASE WHEN m.type='REFUND' THEN m.amount_cents*i.share ELSE 0 END)) AS INTEGER),0)
+ FROM money_transactions m JOIN transaction_items i ON i.transaction_id=m.id WHERE `+where, append(args, id)...).Scan(&out.PurchaseCost, &out.MaintenanceCost, &out.Refund)
 	if e != nil {
 		return out, e
 	}
@@ -288,4 +288,8 @@ func (s *Store) ItemCost(ctx context.Context, id string, f ledger.HistoryFilter)
 	out.TotalCost = out.PurchaseCost + out.MaintenanceCost
 	out.NetCost = ledger.SignedMoney(out.TotalCost - out.Refund)
 	return out, nil
+}
+
+func (s ItemsRepository) DurableAction(ctx context.Context, key, id, action string, p ledger.DurableActionInput) (ledger.DurableDetails, bool, error) {
+	return s.durableAction(ctx, key, "durable_action", id, action, p)
 }

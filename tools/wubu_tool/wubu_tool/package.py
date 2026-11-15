@@ -7,19 +7,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zhaoxi.sdk import CapabilityDeclaration, PermissionLevel, SideEffect, Tool, ToolResult
 from .client import ROUTES, WubuClient, WubuError
-from .event_tools import RecordPurchaseTool, ValidatePurchaseTool, InventoryEventTool
+from .event_tools import InventoryEventTool
 from .reality_tools import create_reality_tools
 
 Operation = Literal[
- 'find_transactions_near_time', 'get_unannotated_transactions', 'annotate_transaction', 'get_financial_inbox', 'get_raw_financial_events', 'review_financial_match', 'get_account_reconciliation', 'capture_financial_event', 'create_merchant_rule', 'update_merchant_rule', 'create_purchase_from_transaction', 'attach_semantic_evidence', 'get_semantic_evidence', 'get_merchant_rules', 'get_financial_settings', 'set_financial_settings',
+    'record_acquisition', 'list_acquisitions', 'get_acquisition', 'amend_acquisition', 'delete_acquisition', 'backfill_acquisition', 'record_maintenance', 'record_sale', 'record_return', 'record_finance_refund', 'link_transaction', 'list_domain_links', 'unlink_transaction',
+ 'find_transactions_near_time', 'get_unannotated_transactions', 'annotate_transaction', 'get_financial_inbox', 'get_raw_financial_events', 'review_financial_match', 'get_account_reconciliation', 'capture_financial_event', 'create_merchant_rule', 'update_merchant_rule', 'attach_semantic_evidence', 'get_semantic_evidence', 'get_merchant_rules', 'get_financial_settings', 'set_financial_settings',
     'create_residence', 'update_residence', 'get_residences', 'link_residence_cost', 'get_residence_cost', 'get_relocation_cost', 'get_residence_durables', 'record_deposit', 'return_deposit', 'forfeit_deposit', 'get_deposits', 'create_receivable', 'settle_receivable', 'cancel_receivable', 'get_receivables', 'get_consumption_forecast', 'get_items_running_low',
     'create_planned_cashflow', 'update_planned_cashflow', 'cancel_planned_cashflow', 'skip_planned_cashflow', 'complete_planned_cashflow', 'get_upcoming_cashflows', 'get_living_runway', 'get_runway_settings', 'set_runway_settings', 'get_spending_by_nature', 'update_expense_nature',
-    "top_up_account", "record_bonus", "update_account", "get_account_statistics", "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
-    "amend_purchase_event", "delete_purchase_event",
-    "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item",
-    "add_maintenance_event", "add_product_alias", "update_durable_details", "search_items", "resolve_item",
+    "top_up_account", "record_bonus", "update_account", "get_account_statistics", "create_account", "set_default_payment_account", "record_income", "record_expense", "transfer_money", "adjust_balance", "reconcile_account", "retire_item", "move_item", "set_durable_status", "get_accounts", "get_balance", "get_account_balance", "get_total_balance", "get_expense_summary", "get_income_summary", "get_category_summary", "get_merchant_summary", "get_recent_transactions", "get_durable_items", "get_item_total_cost",
+    "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item",
+    "add_product_alias", "update_durable_details", "search_items", "resolve_item",
     "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history",
-    "get_inventory_history", "get_recent_purchases", "get_purchase_event", "get_expenses", "get_ledger_summary",
+    "get_inventory_history", "get_expenses", "get_ledger_summary",
     "get_durable_details", "get_product_aliases",
 ]
 
@@ -28,6 +28,7 @@ class WubuInput(BaseModel):
     operation: Operation
     raw_event_id: str | None = None
     rule_id: str | None = None
+    link_id: str | None = None
     residence_id: str | None = None
     claim_id: str | None = None
     cashflow_id: str | None = None
@@ -42,7 +43,7 @@ class WubuInput(BaseModel):
     @model_validator(mode="after")
     def validate_operation(self):
         method, path = ROUTES[self.operation]
-        for field in ("raw_event_id", "rule_id", "residence_id", "claim_id", "cashflow_id", "transaction_id"):
+        for field in ("raw_event_id", "rule_id", "residence_id", "claim_id", "cashflow_id", "transaction_id", "link_id"):
             if "{" + field + "}" in path and not getattr(self, field):
                 raise ValueError(field + " required")
         if "{item_id}" in path and not self.item_id:
@@ -73,13 +74,12 @@ class WubuTool(Tool):
     group = "wubu"
     input_model = WubuInput
     description = (
-        "v0.4：图片或描述先按时间查询候选（默认±30分钟，优先图片EXIF、上传或聊天时间）；多候选不得猜，无候选用 attach_semantic_evidence，不能凭图片捏造消费。补语义只用 annotate_transaction；后补购买用 create_purchase_from_transaction 复用支出。长期商家规则须用户确认。"
-        "物簿记录钱与物：买、用、调、开、完、修、查。购买只调用一次 record_purchase_event，"
-        "不要拆成库存和账目 CRUD。写入必须有稳定 idempotency_key，超时保留原键与参数重试。"
-        "常用购买优先独立 record_purchase 工具，自动匹配或创建；按名称消耗等优先 wubu_inventory_event。其他需要 ID 的操作可 resolve_item；同名耐用品不能猜。"
-        "payload 金额是元（两位小数），原 Item.unit_price_cents 是分。"
-        "包装规格单独写 spec：name=无糖可乐，spec=2L，quantity=1，unit=瓶；不能把规格2L误当成数量。常用单位：瓶、罐、升、毫升、个、包、盒、袋、箱、克、千克。"
-        "改单或删除先 get_purchase_event 读取最新记录；提供 expected_updated_at 和新幂等键。改单保留来源、external_id 和原商品行 id；不再拆开改库存和费用。"
+        "独立记录物品和资金。用 record_acquisition 购入、record_maintenance 维护、record_sale 售出、record_return 退货，分别只写物品。"
+        "用 record_expense、record_income、record_finance_refund 记录已实际发生的款项；需要时用 link_transaction 关联已有记录。"
+        "买入只在用户确认两种事实都已发生时分别登记。每一步使用独立稳定键；超时保留原键和参数，按已有回执续做。"
+        "已有支出需要补库存时使用 backfill_acquisition；关联失败时保留原请求和原键重试。"
+        "补语义先按时间查找候选，再用 annotate_transaction；多候选应核对，无候选用 attach_semantic_evidence。"
+        "改单或删除先 get_acquisition，再提交 expected_updated_at；保留来源、external_id 和原商品行 id。"
         "耐用品每件一行、quantity=1，服务用 UNTRACKED。只在用户有记录/查询意图时调用。"
         "库存纠正用 adjust_inventory payload.quantity（绝对剩余），消耗用 consume_item payload.quantity（用掉量）。"
         "写入 DTO 见 schema，复杂判断由朝汐完成。"
@@ -95,7 +95,7 @@ class WubuTool(Tool):
         return self.permission_for(arguments) == PermissionLevel.READ or bool(arguments.get("idempotency_key"))
     async def execute(self, arguments):
         values = arguments.model_dump(exclude={"operation"}, exclude_none=True)
-        if arguments.operation in {"top_up_account", "record_bonus", "record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "add_maintenance_event", "record_income", "record_expense", "transfer_money", "record_refund", "adjust_balance", "reconcile_account", "add_maintenance", "sell_item", "retire_item", "move_item", "set_durable_status"}:
+        if arguments.operation in {"record_acquisition", "backfill_acquisition", "record_maintenance", "record_sale", "record_return", "record_finance_refund", "top_up_account", "record_bonus", "consume_item", "adjust_inventory", "open_item", "finish_item", "discard_item", "record_income", "record_expense", "transfer_money", "adjust_balance", "reconcile_account", "retire_item", "move_item", "set_durable_status"}:
             values["payload"] = {**values.get("payload", {}), "source": "agent"}
         try:
             result = await asyncio.to_thread(self.client.call, arguments.operation, **values)
@@ -105,17 +105,17 @@ class WubuTool(Tool):
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "0.4.0"
+    package_version = "1.0.0-rc.2"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)
     def configure(self, config): self.client = WubuClient(str(config.get("base_url", "http://127.0.0.1:8026")), float(config.get("timeout_seconds", 15)))
     def create_tools(self, config):
         if self.client is None: self.configure(config)
-        return [WubuTool(self.client), RecordPurchaseTool(self.client), ValidatePurchaseTool(self.client), InventoryEventTool(self.client), *create_reality_tools(self.client)]
+        return [WubuTool(self.client), InventoryEventTool(self.client), *create_reality_tools(self.client)]
     def workflow_paths(self): return []
     def reflection_sources(self): return []
     def routing_hints(self): return [{"markers": ["物簿", "life ledger", "还剩几", "记录购买", "上次多少钱", "记录维修"], "route": "tool"}]
-    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "record_purchase", "tools": ["wubu", "record_purchase", "validate_purchase", "wubu_inventory_event"] + [tool.name for tool in create_reality_tools(self.client)], "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
+    def capabilities(self): return {"id": self.package_id, "name": "物簿", "description": "钱物生命周期与库存数据库", "tool": "wubu", "tools": ["wubu", "wubu_inventory_event"] + [tool.name for tool in create_reality_tools(self.client)], "read_operations": [k for k,v in ROUTES.items() if v[0]=="GET"], "write_operations": [k for k,v in ROUTES.items() if v[0]!="GET"]}
 
 def create_package(): return WubuToolPackage()

@@ -37,9 +37,6 @@ func (a *API) registerFinancial(m *http.ServeMux) {
 		}
 		w.Write(data)
 	})
-	m.HandleFunc("POST /api/v1/financial/transactions/{id}/purchase", writeFinancial(a, 201, func(r *http.Request, p ledger.PurchaseInput) (any, bool, error) {
-		return a.store.CreatePurchaseFromTransaction(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
-	}))
 	m.HandleFunc("POST /api/v1/financial/semantic-evidence", writeFinancial(a, 201, func(r *http.Request, p ledger.SemanticEvidence) (any, bool, error) {
 		return a.store.AttachSemanticEvidence(r.Context(), r.Header.Get("Idempotency-Key"), p)
 	}))

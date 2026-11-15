@@ -126,55 +126,25 @@ func TestApplyIntakeAnalysisCreatesAICategory(t *testing.T) {
 	}
 }
 
-func TestMigrationFromVersionOnePreservesItems(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "migration.db")
-	database, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	input, err := inventory.NormalizeAndValidate(inventory.ItemInput{Name: "Existing item", Quantity: 2})
-	if err != nil {
-		t.Fatalf("normalize item: %v", err)
-	}
-	if _, err := database.Create(context.Background(), "existing-item", input); err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if err := database.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-
+func TestOpenRejectsSchema14WithoutMigrating(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema14.db")
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
-		t.Fatalf("open legacy database: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`DROP TRIGGER wubu_item_create; DROP TRIGGER wubu_item_quantity; DROP TRIGGER wubu_item_delete;
-DROP TABLE intake_attachments; DROP TABLE intake_entries;
-ALTER TABLE items DROP COLUMN auto_consume_at;
-ALTER TABLE items DROP COLUMN short_lived;
-ALTER TABLE items DROP COLUMN unit_price_cents;
-PRAGMA user_version = 1;`); err != nil {
-		_ = raw.Close()
-		t.Fatalf("prepare version one database: %v", err)
+	defer raw.Close()
+	if _, err = raw.Exec(`CREATE TABLE items(id TEXT PRIMARY KEY); INSERT INTO items VALUES ('historical'); PRAGMA user_version=14;`); err != nil {
+		t.Fatal(err)
 	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close legacy database: %v", err)
-	}
-
-	migrated, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open() after migration error = %v", err)
-	}
-	defer migrated.Close()
-	item, err := migrated.Get(context.Background(), "existing-item")
-	if err != nil || item.Quantity != 2 {
-		t.Fatalf("preserved item = %#v, %v", item, err)
+	if _, err = Open(path); err == nil {
+		t.Fatal("Open accepted schema 14")
 	}
 	var version int
-	if err := migrated.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 14 {
-		t.Fatalf("user_version = %d, %v; want 14", version, err)
+	if err = raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 14 {
+		t.Fatal(version, err)
 	}
-	entries, err := migrated.ListIntakes(context.Background(), intake.ListFilter{Limit: 10})
-	if err != nil || entries.Total != 0 {
-		t.Fatalf("migrated intake list = %#v, %v", entries, err)
+	var id string
+	if err = raw.QueryRow(`SELECT id FROM items`).Scan(&id); err != nil || id != "historical" {
+		t.Fatal(id, err)
 	}
 }

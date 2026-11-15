@@ -14,27 +14,20 @@ import (
 
 func (a *API) registerLedger(m *http.ServeMux) {
 	a.registerMoney(m)
-	m.HandleFunc("POST /api/v1/purchases", a.recordPurchase)
-	m.HandleFunc("POST /api/v1/purchases/record", a.agentPurchase(false))
-	m.HandleFunc("POST /api/v1/purchases/validate", a.agentPurchase(true))
+	a.registerDomains(m)
 	for _, action := range []string{"consume", "adjust", "open", "finish", "discard"} {
 		m.HandleFunc("POST /api/v1/items/"+action, a.inventoryAction(strings.ToUpper(action)))
 	}
-	m.HandleFunc("GET /api/v1/purchases", a.listPurchases)
-	m.HandleFunc("GET /api/v1/purchases/{id}", a.getPurchase)
-	m.HandleFunc("PUT /api/v1/purchases/{id}", a.amendPurchase)
-	m.HandleFunc("DELETE /api/v1/purchases/{id}", a.deletePurchase)
 	m.HandleFunc("GET /api/v1/inventory", a.listItems)
 	m.HandleFunc("GET /api/v1/inventory-events", a.inventoryHistory)
 	m.HandleFunc("GET /api/v1/items/resolve", a.resolveItem)
 	m.HandleFunc("GET /api/v1/items/{id}/inventory-events", a.inventoryHistory)
-	m.HandleFunc("GET /api/v1/items/{id}/purchases", a.listPurchases)
+	m.HandleFunc("GET /api/v1/items/{id}/acquisitions", a.listAcquisitions)
 	m.HandleFunc("GET /api/v1/items/{id}/prices", a.priceHistory)
 	m.HandleFunc("POST /api/v1/items/{id}/consume", a.inventoryAction("CONSUME"))
 	m.HandleFunc("POST /api/v1/items/{id}/open", a.inventoryAction("OPEN"))
 	m.HandleFunc("POST /api/v1/items/{id}/finish", a.inventoryAction("FINISH"))
 	m.HandleFunc("POST /api/v1/items/{id}/discard", a.inventoryAction("DISCARD"))
-	m.HandleFunc("POST /api/v1/items/{id}/maintenance", a.addMaintenance)
 	m.HandleFunc("GET /api/v1/items/{id}/maintenance", a.maintenanceHistory)
 	m.HandleFunc("GET /api/v1/maintenance", a.maintenanceHistory)
 	m.HandleFunc("GET /api/v1/items/{id}/durable", a.getDurable)
@@ -76,93 +69,6 @@ func replayHeader(w http.ResponseWriter, replay bool) {
 	}
 }
 
-func (a *API) agentPurchase(validate bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var input ledger.AgentPurchaseInput
-		if e := decodeJSON(w, r, &input); e != nil {
-			a.badJSON(w, r, e)
-			return
-		}
-		var out ledger.Purchase
-		var replay bool
-		var e error
-		if validate {
-			out, e = a.store.ValidatePurchase(r.Context(), input.PurchaseInput())
-		} else {
-			out, replay, e = a.store.RecordPurchase(r.Context(), r.Header.Get("Idempotency-Key"), input.PurchaseInput())
-		}
-		if e != nil {
-			a.ledgerError(w, r, e)
-			return
-		}
-		replayHeader(w, replay)
-		status := 201
-		if validate {
-			status = 200
-		}
-		writeJSON(w, status, map[string]any{"account_id": out.AccountID, "status": out.Status, "purchase_id": out.ID, "expense_amount": out.TotalAmount, "items": out.Items, "warnings": out.Warnings, "validation_status": out.ValidationStatus})
-	}
-}
-func (a *API) recordPurchase(w http.ResponseWriter, r *http.Request) {
-	var input ledger.PurchaseInput
-	if e := decodeJSON(w, r, &input); e != nil {
-		a.badJSON(w, r, e)
-		return
-	}
-	if r.URL.Query().Get("dry_run") == "true" {
-		out, e := a.store.ValidatePurchase(r.Context(), input)
-		if e != nil {
-			a.ledgerError(w, r, e)
-			return
-		}
-		writeJSON(w, 200, out)
-		return
-	}
-	out, replay, e := a.store.RecordPurchase(r.Context(), r.Header.Get("Idempotency-Key"), input)
-	if e != nil {
-		a.ledgerError(w, r, e)
-		return
-	}
-	replayHeader(w, replay)
-	w.Header().Set("Location", "/api/v1/purchases/"+out.ID)
-	writeJSON(w, 201, out)
-}
-func (a *API) getPurchase(w http.ResponseWriter, r *http.Request) {
-	out, e := a.store.GetPurchase(r.Context(), r.PathValue("id"))
-	if e != nil {
-		a.ledgerError(w, r, e)
-		return
-	}
-	writeJSON(w, 200, out)
-}
-func (a *API) amendPurchase(w http.ResponseWriter, r *http.Request) {
-	var input ledger.PurchaseAmendment
-	if e := decodeJSON(w, r, &input); e != nil {
-		a.badJSON(w, r, e)
-		return
-	}
-	out, replay, e := a.store.AmendPurchase(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input)
-	if e != nil {
-		a.ledgerError(w, r, e)
-		return
-	}
-	replayHeader(w, replay)
-	writeJSON(w, 200, out)
-}
-func (a *API) deletePurchase(w http.ResponseWriter, r *http.Request) {
-	var input ledger.PurchaseDeletion
-	if e := decodeJSON(w, r, &input); e != nil {
-		a.badJSON(w, r, e)
-		return
-	}
-	out, replay, e := a.store.DeletePurchase(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), input)
-	if e != nil {
-		a.ledgerError(w, r, e)
-		return
-	}
-	replayHeader(w, replay)
-	writeJSON(w, 200, out)
-}
 func (a *API) inventoryAction(action string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input ledger.InventoryInput
@@ -228,12 +134,12 @@ func (a *API) historyFilter(w http.ResponseWriter, r *http.Request) (ledger.Hist
 func historyJSON(w http.ResponseWriter, f ledger.HistoryFilter, items any) {
 	writeJSON(w, 200, map[string]any{"items": items, "limit": f.Limit, "offset": f.Offset})
 }
-func (a *API) listPurchases(w http.ResponseWriter, r *http.Request) {
+func (a *API) listAcquisitions(w http.ResponseWriter, r *http.Request) {
 	f, ok := a.historyFilter(w, r)
 	if !ok {
 		return
 	}
-	out, e := a.store.Purchases(r.Context(), f)
+	out, e := a.store.Items().Acquisitions(r.Context(), f)
 	if e != nil {
 		a.ledgerError(w, r, e)
 		return
@@ -288,20 +194,6 @@ func (a *API) listExpenses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"items": out, "total_amount": total, "currency": "CNY", "limit": f.Limit, "offset": f.Offset})
-}
-func (a *API) addMaintenance(w http.ResponseWriter, r *http.Request) {
-	var p ledger.MaintenanceInput
-	if e := decodeJSON(w, r, &p); e != nil {
-		a.badJSON(w, r, e)
-		return
-	}
-	out, replay, e := a.store.AddMaintenance(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
-	if e != nil {
-		a.ledgerError(w, r, e)
-		return
-	}
-	replayHeader(w, replay)
-	writeJSON(w, 201, out)
 }
 func (a *API) maintenanceHistory(w http.ResponseWriter, r *http.Request) {
 	f, ok := a.historyFilter(w, r)

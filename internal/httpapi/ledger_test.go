@@ -13,7 +13,7 @@ import (
 	"stockroom/internal/web"
 )
 
-const acceptancePurchase = `{"merchant":"乐尔乐","purchased_at":"2026-10-05T20:30:00+08:00","total_amount":229,"source":"agent","category":"food","items":[{"name":"无糖可乐 2L","quantity":4,"unit":"瓶","unit_price":5.5,"subtotal":22,"item_type":"CONSUMABLE"},{"name":"泡面","quantity":2,"unit":"包","unit_price":4,"subtotal":8,"item_type":"CONSUMABLE"},{"name":"耳机","quantity":1,"unit":"个","unit_price":199,"subtotal":199,"item_type":"DURABLE"}]}`
+const acceptancePurchase = `{"merchant":"乐尔乐","source":"agent","items":[{"name":"无糖可乐 2L","quantity":4,"unit":"瓶","item_type":"CONSUMABLE"},{"name":"泡面","quantity":2,"unit":"包","item_type":"CONSUMABLE"},{"name":"耳机","quantity":1,"unit":"个","item_type":"DURABLE"}],"occurred_at":"2026-10-05T20:30:00+08:00"}`
 
 func keyedRequest(t *testing.T, h http.Handler, method, path, body, key string, want int) *httptest.ResponseRecorder {
 	t.Helper()
@@ -31,16 +31,16 @@ func keyedRequest(t *testing.T, h http.Handler, method, path, body, key string, 
 }
 func TestLedgerHTTPAcceptance(t *testing.T) {
 	h := testHandler(t)
-	first := keyedRequest(t, h, "POST", "/api/v1/purchases", acceptancePurchase, "A", 201)
+	first := keyedRequest(t, h, "POST", "/api/v1/acquisitions", acceptancePurchase, "A", 201)
 	var p ledger.Purchase
 	if e := json.Unmarshal(first.Body.Bytes(), &p); e != nil {
 		t.Fatal(e)
 	}
-	second := keyedRequest(t, h, "POST", "/api/v1/purchases", acceptancePurchase, "A", 201)
+	second := keyedRequest(t, h, "POST", "/api/v1/acquisitions", acceptancePurchase, "A", 201)
 	if second.Header().Get("Idempotency-Replayed") != "true" || first.Body.String() != second.Body.String() {
 		t.Fatal("purchase response not replayed")
 	}
-	keyedRequest(t, h, "POST", "/api/v1/purchases", strings.Replace(acceptancePurchase, `"total_amount":229`, `"total_amount":228`, 1), "A", 409)
+	keyedRequest(t, h, "POST", "/api/v1/acquisitions", strings.Replace(acceptancePurchase, `"quantity":4`, `"quantity":5`, 1), "A", 409)
 	id := p.Items[0].ItemID
 	base := "/api/v1/items/" + id
 	r := keyedRequest(t, h, "POST", base+"/consume", `{"quantity":1}`, "B", 200)
@@ -68,20 +68,20 @@ func TestLedgerHTTPAcceptance(t *testing.T) {
 	keyedRequest(t, h, "POST", base+"/finish", `{}`, "finish", 200)
 	keyedRequest(t, h, "POST", base+"/consume", `{"quantity":1}`, "negative", 409)
 	durable := "/api/v1/items/" + p.Items[2].ItemID
-	keyedRequest(t, h, "POST", durable+"/maintenance", `{"title":"换后胎","cost":65,"occurred_at":"2026-10-05T21:00:00+08:00"}`, "D", 201)
-	keyedRequest(t, h, "POST", durable+"/maintenance", `{"title":"换后胎","cost":65,"occurred_at":"2026-10-05T21:00:00+08:00"}`, "D", 201)
+	keyedRequest(t, h, "POST", durable+"/events/maintenance", `{"title":"换后胎","occurred_at":"2026-10-05T21:00:00+08:00"}`, "D", 201)
+	keyedRequest(t, h, "POST", durable+"/events/maintenance", `{"title":"换后胎","occurred_at":"2026-10-05T21:00:00+08:00"}`, "D", 201)
 	d := performJSON[ledger.Dashboard](t, h, "GET", "/api/v1/ledger/summary?month=2026-10", "", 200)
-	if d.MonthExpense != 29400 || len(d.RecentPurchases) != 1 || len(d.RecentMaintenance) != 1 {
+	if d.MonthExpense != 0 || len(d.RecentPurchases) != 1 || len(d.RecentMaintenance) != 1 {
 		t.Fatal(d)
 	}
-	for _, path := range []string{"/api/v1/inventory", base + "/prices", base + "/purchases", base + "/inventory-events", base + "/aliases", "/api/v1/inventory-events", "/api/v1/maintenance", durable + "/maintenance", durable + "/durable", "/api/v1/purchases/" + p.ID, "/api/v1/expenses?category=food&from=2026-10-01T00:00:00%2B08:00&to=2026-11-01T00:00:00%2B08:00", "/inventory", "/assets/ledger.js", "/assets/ledger.css"} {
+	for _, path := range []string{"/api/v1/inventory", base + "/prices", base + "/acquisitions", base + "/inventory-events", base + "/aliases", "/api/v1/inventory-events", "/api/v1/maintenance", durable + "/maintenance", durable + "/durable", "/api/v1/acquisitions/" + p.ID, "/api/v1/expenses?category=food&from=2026-10-01T00:00:00%2B08:00&to=2026-11-01T00:00:00%2B08:00", "/inventory", "/assets/ledger.js", "/assets/ledger.css"} {
 		keyedRequest(t, h, "GET", path, "", "", 200)
 	}
-	keyedRequest(t, h, "GET", "/api/v1/purchases?limit=0", "", "", 422)
+	keyedRequest(t, h, "GET", "/api/v1/acquisitions?limit=0", "", "", 422)
 	keyedRequest(t, h, "GET", "/api/v1/expenses?from=yesterday", "", "", 422)
 	keyedRequest(t, h, "DELETE", base, "", "", 409)
-	keyedRequest(t, h, "POST", "/api/v1/purchases", strings.Replace(acceptancePurchase, `"total_amount":229`, `"total_amount":229.001`, 1), "bad-money", 400)
-	keyedRequest(t, h, "POST", "/api/v1/purchases", `{"unexpected":true}`, "bad-json", 400)
+	keyedRequest(t, h, "POST", "/api/v1/acquisitions", strings.Replace(acceptancePurchase, `"quantity":4`, `"total_amount":229.001`, 1), "bad-money", 400)
+	keyedRequest(t, h, "POST", "/api/v1/acquisitions", `{"unexpected":true}`, "bad-json", 400)
 }
 
 func TestOpenAPILedgerContract(t *testing.T) {
@@ -114,7 +114,7 @@ func TestOpenAPILedgerContract(t *testing.T) {
 			ids[id] = true
 		}
 	}
-	for _, id := range []string{"record_purchase_event", "consume_item", "adjust_inventory", "open_item", "finish_item", "add_maintenance_event", "search_items", "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history", "get_recent_purchases", "create_account", "transfer_money", "record_income", "record_refund", "adjust_balance", "sell_item", "retire_item", "move_item", "get_durable_items", "get_item_total_cost"} {
+	for _, id := range []string{"record_acquisition", "consume_item", "adjust_inventory", "open_item", "finish_item", "record_maintenance", "search_items", "get_item", "get_inventory", "get_purchase_history", "get_price_history", "get_maintenance_history", "list_acquisitions", "create_account", "transfer_money", "record_income", "record_finance_refund", "adjust_balance", "record_sale", "retire_item", "move_item", "get_durable_items", "get_item_total_cost"} {
 		if !ids[id] {
 			t.Error("missing operation", id)
 		}

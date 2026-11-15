@@ -70,10 +70,6 @@ type AccountPatch struct {
 type MoneySettings struct {
 	DefaultPaymentAccount string `json:"default_payment_account"`
 }
-type ReturnItem struct {
-	ItemID   string  `json:"item_id"`
-	Quantity float64 `json:"quantity"`
-}
 type MoneyInput struct {
 	ExpenseNature        string       `json:"expense_nature,omitempty"`
 	AccountID            string       `json:"account_id,omitempty"`
@@ -83,16 +79,15 @@ type MoneyInput struct {
 	ActualBalance        *SignedMoney `json:"actual_balance,omitempty"`
 	Category             string       `json:"category,omitempty"`
 	Merchant             string       `json:"merchant,omitempty"`
-	PurchaseEventID      string       `json:"purchase_event_id,omitempty"`
 	RelatedTransactionID string       `json:"related_transaction_id,omitempty"`
 	ExternalID           string       `json:"external_id,omitempty"`
 	OccurredAt           string       `json:"occurred_at,omitempty"`
 	Source               string       `json:"source,omitempty"`
 	Note                 string       `json:"note,omitempty"`
 	Reason               string       `json:"reason,omitempty"`
-	ReturnItems          []ReturnItem `json:"return_items,omitempty"`
 }
 type MoneyTransaction struct {
+	RefundableAmount     *Money      `json:"refundable_amount,omitempty"`
 	ExpenseNature        string      `json:"expense_nature"`
 	ID                   string      `json:"id"`
 	AccountID            string      `json:"account_id"`
@@ -103,8 +98,6 @@ type MoneyTransaction struct {
 	BalanceAfter         SignedMoney `json:"balance_after"`
 	Category             string      `json:"category"`
 	Merchant             string      `json:"merchant"`
-	PurchaseEventID      string      `json:"purchase_event_id,omitempty"`
-	MaintenanceEventID   string      `json:"maintenance_event_id,omitempty"`
 	RelatedTransactionID string      `json:"related_transaction_id,omitempty"`
 	ExternalID           string      `json:"external_id,omitempty"`
 	OccurredAt           string      `json:"occurred_at"`
@@ -162,7 +155,6 @@ type BalanceSummary struct {
 	TotalValue         SignedMoney `json:"total_value"`
 	Currency           string      `json:"currency"`
 	TotalBalance       SignedMoney `json:"total_balance"`
-	AvailableBalance   SignedMoney `json:"available_balance"`
 	Accounts           []Account   `json:"accounts"`
 }
 type DurableEvent struct {
@@ -179,8 +171,6 @@ type DurableEvent struct {
 type DurableActionInput struct {
 	Status     string `json:"status,omitempty"`
 	Location   string `json:"location,omitempty"`
-	Amount     Money  `json:"amount,omitempty"`
-	AccountID  string `json:"account_id,omitempty"`
 	OccurredAt string `json:"occurred_at,omitempty"`
 	Source     string `json:"source,omitempty"`
 	Note       string `json:"note,omitempty"`

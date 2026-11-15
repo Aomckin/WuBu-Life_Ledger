@@ -102,10 +102,11 @@ func (a *API) registerMoney(m *http.ServeMux) {
 	m.HandleFunc("PATCH /api/v1/money/settings", writeLedger(a, 200, func(r *http.Request, p ledger.MoneySettings) (any, bool, error) {
 		return a.store.SetMoneySettings(r.Context(), r.Header.Get("Idempotency-Key"), p)
 	}))
-	for path, kind := range map[string]string{"expenses": "EXPENSE", "income": "INCOME", "transfers": "TRANSFER", "refunds": "REFUND", "adjustments": "ADJUSTMENT", "reconcile": "ADJUSTMENT", "bonuses": "BONUS"} {
-		m.HandleFunc("POST /api/v1/money/"+path, writeLedger(a, 201, func(r *http.Request, p ledger.MoneyInput) (any, bool, error) {
-			return a.store.MoneyAction(r.Context(), r.Header.Get("Idempotency-Key"), kind, p)
-		}))
+	for path, kind := range map[string]string{"expenses": "EXPENSE", "income": "INCOME", "transfers": "TRANSFER", "adjustments": "ADJUSTMENT", "reconcile": "ADJUSTMENT", "bonuses": "BONUS"} {
+		handler := writeLedger(a, 201, func(r *http.Request, p ledger.MoneyInput) (any, bool, error) {
+			return a.store.Finance().Record(r.Context(), r.Header.Get("Idempotency-Key"), kind, p)
+		})
+		m.HandleFunc("POST /api/v1/money/"+path, handler)
 	}
 	m.HandleFunc("GET /api/v1/money/transactions", func(w http.ResponseWriter, r *http.Request) {
 		f, ok := a.moneyFilter(w, r)
@@ -193,18 +194,13 @@ func (a *API) registerMoney(m *http.ServeMux) {
 		}
 		writeJSON(w, 200, out)
 	})
-	for _, action := range []string{"sell", "retire", "move", "status"} {
-		m.HandleFunc("POST /api/v1/items/{id}/"+action, writeLedger(a, 200, func(r *http.Request, p ledger.DurableActionInput) (any, bool, error) {
+	for _, action := range []string{"retire", "move", "status"} {
+		handler := writeLedger(a, 200, func(r *http.Request, p ledger.DurableActionInput) (any, bool, error) {
 			return a.store.DurableAction(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), action, p)
-		}))
+		})
+		m.HandleFunc("POST /api/v1/items/{id}/"+action, handler)
 	}
-	m.HandleFunc("POST /api/v1/money/import/preview", writeLedger(a, 200, func(r *http.Request, p store.MoneyImportInput) (any, bool, error) {
-		out, e := a.store.PreviewMoneyImport(r.Context(), p)
-		return out, false, e
-	}))
-	m.HandleFunc("POST /api/v1/money/import", writeLedger(a, 201, func(r *http.Request, p store.MoneyImportInput) (any, bool, error) {
-		return a.store.ImportMoney(r.Context(), r.Header.Get("Idempotency-Key"), p)
-	}))
+
 }
 func (a *API) moneyFilter(w http.ResponseWriter, r *http.Request) (ledger.MoneyFilter, bool) {
 	h, ok := a.historyFilter(w, r)

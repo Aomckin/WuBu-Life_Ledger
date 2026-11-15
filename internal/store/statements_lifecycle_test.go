@@ -208,30 +208,14 @@ func TestNativeFileCannotDebitDifferentAccountOnReimport(t *testing.T) {
 	countTable(t, s, "raw_financial_events", 1)
 }
 
-func TestNativeSchema13UpgradeAndRestartKeepsFileAndReplay(t *testing.T) {
+func TestNativeRestartKeepsFileAndReplay(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "native-upgrade.db")
+	path := filepath.Join(t.TempDir(), "native-restart.db")
 	s, e := Open(path)
 	if e != nil {
 		t.Fatal(e)
 	}
-	a := moneyAccount(t, s, "upgrade-bank", "BANK", 10000)
-	// Reproduce the v13 boundary while retaining all prior ledger facts.
-	for _, table := range []string{"import_batch_rows", "import_batches"} {
-		if _, e = s.db.Exec(`DROP TABLE ` + table); e != nil {
-			t.Fatal(e)
-		}
-	}
-	if _, e = s.db.Exec(`PRAGMA user_version=13`); e != nil {
-		t.Fatal(e)
-	}
-	if e = s.Close(); e != nil {
-		t.Fatal(e)
-	}
-	s, e = Open(path)
-	if e != nil {
-		t.Fatal(e)
-	}
+	a := moneyAccount(t, s, "restart-bank", "BANK", 10000)
 	p := ledger.StatementInput{AccountID: a.ID, Filename: "原始微信.csv", File: nativeWechat("2026-11-01 12:03:00,商户消费,商家,,支出,20.00,零钱,支付成功,persisted,,\n")}
 	preview, e := s.PreviewStatement(ctx, "wechat", p)
 	if e != nil {

@@ -55,7 +55,7 @@ func statementToken(ctx context.Context, tx *sql.Tx, code string, p ledger.State
 	return fmt.Sprintf("%x", sha256.Sum256(b)), nil
 }
 
-func (s *Store) PreviewStatement(ctx context.Context, code string, p ledger.StatementInput) (ledger.StatementResult, error) {
+func (s FinanceRepository) PreviewStatement(ctx context.Context, code string, p ledger.StatementInput) (ledger.StatementResult, error) {
 	parsed, e := validateStatement(code, p)
 	if e != nil {
 		return ledger.StatementResult{}, e
@@ -83,7 +83,7 @@ func (s *Store) PreviewStatement(ctx context.Context, code string, p ledger.Stat
 	}
 	return out, e
 }
-func (s *Store) CommitStatement(ctx context.Context, key, code string, p ledger.StatementInput) (ledger.StatementResult, bool, error) {
+func (s FinanceRepository) CommitStatement(ctx context.Context, key, code string, p ledger.StatementInput) (ledger.StatementResult, bool, error) {
 	var out ledger.StatementResult
 	if key == "" || p.PreviewToken == "" {
 		return out, false, fmt.Errorf("%w: 请先预览再确认", ledger.ErrInvalid)
@@ -448,13 +448,13 @@ func statementCurrency(code string, o *ir.Order, row statement.Row) string {
 	return "CNY"
 }
 
-func (s *Store) StatementBatches(ctx context.Context, syncID string, limit, offset int) ([]ledger.ImportBatch, error) {
+func (s FinanceRepository) StatementBatches(ctx context.Context, syncID string, limit, offset int) ([]ledger.ImportBatch, error) {
 	if limit < 1 || limit > 500 || offset < 0 || len(syncID) > 100 {
 		return nil, ledger.ErrInvalid
 	}
 	return s.statementBatches(ctx, syncID, limit, offset)
 }
-func (s *Store) statementBatches(ctx context.Context, syncID string, limit, offset int) ([]ledger.ImportBatch, error) {
+func (s FinanceRepository) statementBatches(ctx context.Context, syncID string, limit, offset int) ([]ledger.ImportBatch, error) {
 	query := `SELECT payload FROM import_batches WHERE (?='' OR sync_id=?) ORDER BY rowid DESC`
 	args := []any{syncID, syncID}
 	if limit > 0 {
@@ -480,7 +480,7 @@ func (s *Store) statementBatches(ctx context.Context, syncID string, limit, offs
 	}
 	return out, rows.Err()
 }
-func (s *Store) StatementFile(ctx context.Context, id string) (string, []byte, error) {
+func (s FinanceRepository) StatementFile(ctx context.Context, id string) (string, []byte, error) {
 	var name string
 	var data []byte
 	e := s.db.QueryRowContext(ctx, `SELECT filename,original_file FROM import_batches WHERE id=?`, id).Scan(&name, &data)
@@ -490,7 +490,7 @@ func (s *Store) StatementFile(ctx context.Context, id string) (string, []byte, e
 	return name, data, e
 }
 
-func (s *Store) StatementSummary(ctx context.Context, syncID string) (ledger.StatementSummary, error) {
+func (s FinanceRepository) StatementSummary(ctx context.Context, syncID string) (ledger.StatementSummary, error) {
 	out := ledger.StatementSummary{Batches: []ledger.ImportBatch{}, AccountHealth: []ledger.AccountHealth{}}
 	if len(syncID) > 100 {
 		return out, ledger.ErrInvalid

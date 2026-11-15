@@ -30,8 +30,7 @@ async def main():
     c=await call('create_receivable',payload={'amount':300,'account_id':account['id'],'counterparty':'公司'},idempotency_key='v03-advance')
     settled=await call('settle_receivable',claim_id=c['id'],payload={'amount':300},idempotency_key='v03-settle')
     assert settled['status']=='SETTLED'
-    purchase=await tools['record_purchase'].run({'items':[{'name':'v03 显示器','item_type':'DURABLE','quantity':1,'unit':'个','price':100}],'expense_nature':'SETUP','account_id':account['id'],'idempotency_key':'v03-monitor'})
-    assert purchase.success,purchase
+    await call('record_acquisition', payload={'items':[{'name':'v03 显示器','item_type':'DURABLE','quantity':1,'unit':'个'}]}, idempotency_key='v03-monitor')
     rows=await call('get_durable_items',query={'search':'v03 显示器'})
     item=rows['items'][0]['details']['item_id']
     await call('update_durable_details',item_id=item,payload={'residence_id':r['id'],'has_original_packaging':True,'purchase_proof':'local-attachment-reference','estimated_resale_value':80},idempotency_key='v03-details')

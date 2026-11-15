@@ -61,7 +61,7 @@ func insertPlanned(ctx context.Context, tx *sql.Tx, p ledger.PlannedCashflow) er
 	_, e := tx.ExecContext(ctx, `INSERT INTO planned_cashflows(`+plannedColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, p.Direction, p.Amount, p.DueAt, p.AccountID, p.Category, p.ExpenseNature, p.Recurrence, p.IntervalDays, p.Mandatory, p.Status, p.LinkedTransactionID, p.Note, p.CreatedAt, p.UpdatedAt)
 	return e
 }
-func (s *Store) SavePlannedCashflow(ctx context.Context, key, id string, p ledger.PlannedCashflowInput) (out ledger.PlannedCashflow, replay bool, e error) {
+func (s FinanceRepository) SavePlannedCashflow(ctx context.Context, key, id string, p ledger.PlannedCashflowInput) (out ledger.PlannedCashflow, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "save_planned:"+id, p, &out, func(tx *sql.Tx) error {
 		if e := validatePlanned(&p); e != nil {
 			return e
@@ -95,7 +95,7 @@ func (s *Store) SavePlannedCashflow(ctx context.Context, key, id string, p ledge
 }
 
 // Completing a plan posts the real payment and advances recurrence in one event.
-func (s *Store) ActPlannedCashflow(ctx context.Context, key, id, action string, p ledger.PlannedAction) (out ledger.PlannedCashflow, replay bool, e error) {
+func (s FinanceRepository) ActPlannedCashflow(ctx context.Context, key, id, action string, p ledger.PlannedAction) (out ledger.PlannedCashflow, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "planned:"+action+":"+id, p, &out, func(tx *sql.Tx) error {
 		var e error
 		out, e = scanPlanned(tx.QueryRowContext(ctx, `SELECT `+plannedColumns+` FROM planned_cashflows WHERE id=?`, id))
@@ -120,7 +120,7 @@ func (s *Store) ActPlannedCashflow(ctx context.Context, key, id, action string, 
 				kind = "INCOME"
 				delta = -delta
 			}
-			t, e := postMoney(ctx, tx, kind, ledger.MoneyInput{AccountID: account, Amount: out.Amount, Category: out.Category, ExpenseNature: out.ExpenseNature, OccurredAt: p.OccurredAt, Note: out.Note, Reason: "PLANNED:" + id}, "", delta)
+			t, e := postMoney(ctx, tx, kind, ledger.MoneyInput{AccountID: account, Amount: out.Amount, Category: out.Category, ExpenseNature: out.ExpenseNature, OccurredAt: p.OccurredAt, Note: out.Note, Reason: "PLANNED:" + id}, delta)
 			if e != nil {
 				return e
 			}
@@ -169,7 +169,7 @@ func nextDue(at time.Time, recurrence string, days int) time.Time {
 	}
 	return first.AddDate(0, 0, day-1)
 }
-func (s *Store) UpcomingCashflows(ctx context.Context, from, to string) ([]ledger.PlannedCashflow, error) {
+func (s FinanceRepository) UpcomingCashflows(ctx context.Context, from, to string) ([]ledger.PlannedCashflow, error) {
 	if _, _, e := ledger.PeriodRange("", from, to, time.Now()); e != nil {
 		return nil, e
 	}
@@ -188,11 +188,11 @@ func (s *Store) UpcomingCashflows(ctx context.Context, from, to string) ([]ledge
 	}
 	return out, rows.Err()
 }
-func (s *Store) RunwaySettings(ctx context.Context) (out ledger.RunwaySettings, e error) {
+func (s FinanceRepository) RunwaySettings(ctx context.Context) (out ledger.RunwaySettings, e error) {
 	e = s.db.QueryRowContext(ctx, `SELECT safety_buffer_cents,horizon_days FROM runway_settings WHERE id=1`).Scan(&out.SafetyBuffer, &out.HorizonDays)
 	return
 }
-func (s *Store) SetRunwaySettings(ctx context.Context, key string, p ledger.RunwaySettings) (out ledger.RunwaySettings, replay bool, e error) {
+func (s FinanceRepository) SetRunwaySettings(ctx context.Context, key string, p ledger.RunwaySettings) (out ledger.RunwaySettings, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "runway_settings", p, &out, func(tx *sql.Tx) error {
 		if p.SafetyBuffer < 0 || p.SafetyBuffer > 1e12 || p.HorizonDays < 1 || p.HorizonDays > 3660 {
 			return ledger.ErrInvalid
@@ -203,7 +203,7 @@ func (s *Store) SetRunwaySettings(ctx context.Context, key string, p ledger.Runw
 	})
 	return
 }
-func (s *Store) LivingRunway(ctx context.Context, now time.Time) (out ledger.LivingRunway, e error) {
+func (s FinanceRepository) LivingRunway(ctx context.Context, now time.Time) (out ledger.LivingRunway, e error) {
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return out, e
@@ -296,7 +296,7 @@ func (s *Store) LivingRunway(ctx context.Context, now time.Time) (out ledger.Liv
 	}
 	return out, nil
 }
-func (s *Store) SetExpenseNature(ctx context.Context, key, id string, p ledger.ExpenseNatureInput) (out ledger.MoneyTransaction, replay bool, e error) {
+func (s FinanceRepository) SetExpenseNature(ctx context.Context, key, id string, p ledger.ExpenseNatureInput) (out ledger.MoneyTransaction, replay bool, e error) {
 	replay, e = s.ledgerTx(ctx, key, "expense_nature:"+id, p, &out, func(tx *sql.Tx) error {
 		if !validNature(p.ExpenseNature) {
 			return ledger.ErrInvalid

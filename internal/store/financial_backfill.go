@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *Store) AttachSemanticEvidence(ctx context.Context, key string, p ledger.SemanticEvidence) (ledger.SemanticEvidence, bool, error) {
+func (s FinanceRepository) AttachSemanticEvidence(ctx context.Context, key string, p ledger.SemanticEvidence) (ledger.SemanticEvidence, bool, error) {
 	out := p
 	r, e := s.ledgerTx(ctx, key, "semantic_evidence", p, &out, func(tx *sql.Tx) error {
 		switch p.Source {
@@ -52,7 +52,7 @@ func (s *Store) AttachSemanticEvidence(ctx context.Context, key string, p ledger
 	})
 	return out, r, e
 }
-func (s *Store) SaveMerchantRule(ctx context.Context, key, id string, p ledger.MerchantRule) (ledger.MerchantRule, bool, error) {
+func (s FinanceRepository) SaveMerchantRule(ctx context.Context, key, id string, p ledger.MerchantRule) (ledger.MerchantRule, bool, error) {
 	out := p
 	r, e := s.ledgerTx(ctx, key, "merchant_rule:"+id, p, &out, func(tx *sql.Tx) error {
 		if p.Annotation.ExpenseNature != nil && !validNature(*p.Annotation.ExpenseNature) {
@@ -82,7 +82,7 @@ func (s *Store) SaveMerchantRule(ctx context.Context, key, id string, p ledger.M
 	})
 	return out, r, e
 }
-func (s *Store) FinancialAuxiliary(ctx context.Context, kind string) ([]json.RawMessage, error) {
+func (s FinanceRepository) FinancialAuxiliary(ctx context.Context, kind string) ([]json.RawMessage, error) {
 	table := map[string]string{"semantic-evidence": "semantic_evidence", "merchant-rules": "merchant_rules"}[kind]
 	if table == "" {
 		return nil, ledger.ErrInvalid

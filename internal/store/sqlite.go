@@ -27,8 +27,14 @@ const itemColumns = `id, name, category, icon, quantity, unit, location,
 	low_stock_threshold, expiry_date, unit_price_cents, short_lived, auto_consume_at,
 	notes, created_at, updated_at, version, item_type, opened_at, spec, package_size, package_unit`
 
+type repository struct{ db *sql.DB }
+
+// Store assembles the domain repositories and shared persistence.
 type Store struct {
-	db        *sql.DB
+	repository
+	ItemsRepository
+	FinanceRepository
+	LinksRepository
 	intakeDir string
 }
 
@@ -64,14 +70,19 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create intake directory: %w", err)
 	}
-	store := &Store{db: db, intakeDir: intakeDir}
+	shared := repository{db: db}
+	store := &Store{
+		repository: shared, ItemsRepository: ItemsRepository{shared},
+		FinanceRepository: FinanceRepository{shared}, LinksRepository: LinksRepository{shared},
+		intakeDir: intakeDir,
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := store.Ping(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if err := store.migrate(ctx); err != nil {
+	if err := store.initializeSchema(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -87,156 +98,7 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) migrate(ctx context.Context) error {
-	const schema = `
-CREATE TABLE IF NOT EXISTS items (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL COLLATE NOCASE,
-    category TEXT NOT NULL,
-    icon TEXT NOT NULL,
-    quantity REAL NOT NULL CHECK (quantity >= 0),
-    unit TEXT NOT NULL,
-    location TEXT NOT NULL DEFAULT '',
-    low_stock_threshold REAL CHECK (low_stock_threshold IS NULL OR low_stock_threshold >= 0),
-    expiry_date TEXT,
-    unit_price_cents INTEGER CHECK (unit_price_cents IS NULL OR (unit_price_cents >= 0 AND unit_price_cents <= 1000000000)),
-    short_lived INTEGER NOT NULL DEFAULT 0 CHECK (short_lived IN (0, 1)),
-    auto_consume_at TEXT,
-    notes TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1
-);
-CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
-CREATE INDEX IF NOT EXISTS idx_items_location ON items(location COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_items_expiry ON items(expiry_date) WHERE expiry_date IS NOT NULL;
-CREATE TABLE IF NOT EXISTS intake_entries (
-    id TEXT PRIMARY KEY,
-    source TEXT NOT NULL CHECK (source IN ('command', 'receipt', 'purchase_photo', 'voice')),
-    text TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed')),
-    batch_id TEXT NOT NULL DEFAULT '',
-    workflow_state TEXT NOT NULL DEFAULT 'queued',
-    failure_reason TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS intake_attachments (
-    id TEXT PRIMARY KEY,
-    entry_id TEXT NOT NULL REFERENCES intake_entries(id) ON DELETE CASCADE,
-    file_name TEXT NOT NULL,
-    media_type TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
-    content BLOB NOT NULL,
-    storage_key TEXT,
-    expires_at TEXT,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_intake_status_created ON intake_entries(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_intake_attachments_entry ON intake_attachments(entry_id);
-CREATE TABLE IF NOT EXISTS intake_analyses (
-    entry_id TEXT PRIMARY KEY REFERENCES intake_entries(id) ON DELETE CASCADE,
-    model TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    suggestions_json TEXT NOT NULL,
-    needs_review INTEGER NOT NULL DEFAULT 1 CHECK (needs_review IN (0, 1)),
-    processed_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS intake_settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    auto_analyze INTEGER NOT NULL DEFAULT 1 CHECK (auto_analyze IN (0, 1))
-);`
-	if _, err := s.db.ExecContext(ctx, schema); err != nil {
-		return fmt.Errorf("apply database schema: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "items", "unit_price_cents", `ALTER TABLE items ADD COLUMN unit_price_cents INTEGER CHECK (unit_price_cents IS NULL OR (unit_price_cents >= 0 AND unit_price_cents <= 1000000000))`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "intake_attachments", "storage_key", `ALTER TABLE intake_attachments ADD COLUMN storage_key TEXT`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "intake_attachments", "expires_at", `ALTER TABLE intake_attachments ADD COLUMN expires_at TEXT`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "intake_entries", "batch_id", `ALTER TABLE intake_entries ADD COLUMN batch_id TEXT NOT NULL DEFAULT ''`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "intake_entries", "workflow_state", `ALTER TABLE intake_entries ADD COLUMN workflow_state TEXT NOT NULL DEFAULT 'queued'`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "intake_entries", "failure_reason", `ALTER TABLE intake_entries ADD COLUMN failure_reason TEXT NOT NULL DEFAULT ''`); err != nil {
-		return err
-	}
-	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_intake_batch_workflow_created
-ON intake_entries(batch_id, workflow_state, created_at DESC)`); err != nil {
-		return fmt.Errorf("create intake batch workflow index: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "items", "short_lived", `ALTER TABLE items ADD COLUMN short_lived INTEGER NOT NULL DEFAULT 0 CHECK (short_lived IN (0, 1))`); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "items", "auto_consume_at", `ALTER TABLE items ADD COLUMN auto_consume_at TEXT`); err != nil {
-		return err
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE intake_attachments
-SET expires_at = strftime('%Y-%m-%dT%H:%M:%SZ', created_at, '+24 hours')
-WHERE expires_at IS NULL`); err != nil {
-		return fmt.Errorf("backfill intake expiry: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE intake_entries
-SET workflow_state = 'applied'
-WHERE status = 'reviewed' AND workflow_state = 'queued'`); err != nil {
-		return fmt.Errorf("backfill reviewed intake workflow: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE intake_entries
-SET workflow_state = 'needs_review'
-WHERE status = 'pending' AND workflow_state = 'queued'
-AND EXISTS (SELECT 1 FROM intake_analyses WHERE intake_analyses.entry_id = intake_entries.id)`); err != nil {
-		return fmt.Errorf("backfill analyzed intake workflow: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO intake_settings (id, auto_analyze) VALUES (1, 1)`); err != nil {
-		return fmt.Errorf("create intake settings: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `PRAGMA user_version = 6`); err != nil {
-		return fmt.Errorf("set database schema version: %w", err)
-	}
-	return s.migrateLedger(ctx)
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, statement string) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
-	if err != nil {
-		return fmt.Errorf("inspect %s schema: %w", table, err)
-	}
-	found := false
-	for rows.Next() {
-		var cid int
-		var name, dataType string
-		var notNull, primaryKey int
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("scan %s schema: %w", table, err)
-		}
-		if name == column {
-			found = true
-		}
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close %s schema rows: %w", table, err)
-	}
-	if found {
-		return nil
-	}
-	if _, err := s.db.ExecContext(ctx, statement); err != nil {
-		return fmt.Errorf("add %s.%s: %w", table, column, err)
-	}
-	return nil
-}
-
-func (s *Store) Create(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
+func (s ItemsRepository) Create(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
 	var err error
 	input.Name, input.ProductSpec, err = inventory.NormalizeProduct(input.Name, input.ProductSpec)
 	if err != nil {
@@ -255,7 +117,7 @@ short_lived, auto_consume_at, notes, created_at, updated_at, version,spec,packag
 	return s.Get(ctx, id)
 }
 
-func (s *Store) Get(ctx context.Context, id string) (inventory.Item, error) {
+func (s ItemsRepository) Get(ctx context.Context, id string) (inventory.Item, error) {
 	if _, err := s.ApplyDueAutoConsumption(ctx); err != nil {
 		return inventory.Item{}, err
 	}
@@ -270,9 +132,9 @@ func (s *Store) Get(ctx context.Context, id string) (inventory.Item, error) {
 	return item, nil
 }
 
-func (s *Store) Update(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
+func (s ItemsRepository) Update(ctx context.Context, id string, input inventory.ItemInput) (inventory.Item, error) {
 	var out inventory.Item
-	_, err := s.ledgerTx(ctx, "", "legacy-update:"+id, input, &out, func(tx *sql.Tx) error {
+	_, err := s.ledgerTx(ctx, "", "item-update:"+id, input, &out, func(tx *sql.Tx) error {
 		current, e := getTxItem(ctx, tx, id)
 		if e != nil {
 			return e
@@ -299,7 +161,7 @@ WHERE id = ?`, input.Name, input.Category, input.Icon, input.Quantity, input.Uni
 	return out, err
 }
 
-func (s *Store) Delete(ctx context.Context, id string) error {
+func (s ItemsRepository) Delete(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM items WHERE id = ?`, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
@@ -310,7 +172,7 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return requireAffected(result)
 }
 
-func (s *Store) Adjust(ctx context.Context, id string, delta float64) (inventory.Item, error) {
+func (s ItemsRepository) Adjust(ctx context.Context, id string, delta float64) (inventory.Item, error) {
 	if _, err := s.ApplyDueAutoConsumption(ctx); err != nil {
 		return inventory.Item{}, err
 	}
@@ -326,7 +188,7 @@ func (s *Store) Adjust(ctx context.Context, id string, delta float64) (inventory
 	return out.Item, err
 }
 
-func (s *Store) List(ctx context.Context, filter inventory.ListFilter) (inventory.ListResult, error) {
+func (s ItemsRepository) List(ctx context.Context, filter inventory.ListFilter) (inventory.ListResult, error) {
 	if _, err := s.ApplyDueAutoConsumption(ctx); err != nil {
 		return inventory.ListResult{}, err
 	}
@@ -417,7 +279,7 @@ ORDER BY name COLLATE NOCASE, created_at DESC LIMIT ? OFFSET ?`, queryArgs...)
 	return inventory.ListResult{Items: items, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
-func (s *Store) Summary(ctx context.Context) (inventory.Summary, error) {
+func (s ItemsRepository) Summary(ctx context.Context) (inventory.Summary, error) {
 	if _, err := s.ApplyDueAutoConsumption(ctx); err != nil {
 		return inventory.Summary{}, err
 	}
@@ -475,7 +337,7 @@ func scanItem(row scanner) (inventory.Item, error) {
 	return item, nil
 }
 
-func (s *Store) ApplyDueAutoConsumption(ctx context.Context) (int64, error) {
+func (s ItemsRepository) ApplyDueAutoConsumption(ctx context.Context) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(ctx, `UPDATE items SET
 quantity = 0, auto_consume_at = NULL, updated_at = ?, version = version + 1

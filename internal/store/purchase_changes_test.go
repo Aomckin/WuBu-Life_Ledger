@@ -7,13 +7,15 @@ import (
 	"testing"
 )
 
-func colaPurchase(unit string, quantity float64) ledger.PurchaseInput {
-	return ledger.PurchaseInput{TotalAmount: 550, Source: "agent", Category: "food", Items: []ledger.PurchaseLine{{Name: "无糖可乐 2L", Quantity: quantity, Unit: unit, UnitPrice: 550, Subtotal: 550, ItemType: ledger.Consumable}}}
+func colaPurchase(unit string, quantity float64) ledger.AcquisitionInput {
+	return ledger.AcquisitionInput{Source: "agent", Items: []ledger.AcquisitionLine{{Name: "无糖可乐 2L", Quantity: quantity, Unit: unit, ItemType: ledger.Consumable}}}
 }
-func amendment(p ledger.Purchase) ledger.PurchaseAmendment {
-	in := p.PurchaseInput
-	in.Items = append([]ledger.PurchaseLine(nil), p.Items...)
-	return ledger.PurchaseAmendment{PurchaseInput: in, ExpectedUpdatedAt: p.UpdatedAt}
+func amendment(p ledger.Purchase) ledger.AcquisitionAmendment {
+	in := ledger.AcquisitionInput{OccurredAt: p.PurchasedAt, Merchant: p.Merchant, Source: p.Source, ExternalID: p.ExternalID, Note: p.Note}
+	for _, line := range p.Items {
+		in.Items = append(in.Items, ledger.AcquisitionLine{ID: line.ID, ItemID: line.ItemID, Name: line.Name, ProductSpec: line.ProductSpec, Quantity: line.Quantity, Unit: line.Unit, ItemType: line.ItemType})
+	}
+	return ledger.AcquisitionAmendment{AcquisitionInput: in, ExpectedUpdatedAt: p.UpdatedAt}
 }
 func TestPurchaseCorrectUnitAndDeleteAtomic(t *testing.T) {
 	s := ledgerDB(t)
@@ -23,7 +25,7 @@ func TestPurchaseCorrectUnitAndDeleteAtomic(t *testing.T) {
 	change.Items[0].Name = "无糖可乐2L"
 	change.Items[0].Quantity = 1
 	change.Items[0].Unit = "瓶"
-	updated, replayed, e := s.AmendPurchase(ctx, "edit", old.ID, change)
+	updated, replayed, e := s.AmendAcquisition(ctx, "edit", old.ID, change)
 	if e != nil || replayed {
 		t.Fatal(updated, e)
 	}
@@ -34,7 +36,7 @@ func TestPurchaseCorrectUnitAndDeleteAtomic(t *testing.T) {
 	if updated.ID != old.ID || updated.Items[0].ID != old.Items[0].ID {
 		t.Fatal("lost stable identity")
 	}
-	if _, replayed, e = s.AmendPurchase(ctx, "edit", old.ID, change); e != nil || !replayed {
+	if _, replayed, e = s.AmendAcquisition(ctx, "edit", old.ID, change); e != nil || !replayed {
 		t.Fatal(replayed, e)
 	}
 	countTable(t, s, "purchase_revisions", 1)
@@ -42,27 +44,27 @@ func TestPurchaseCorrectUnitAndDeleteAtomic(t *testing.T) {
 	if e != nil || len(events) != 2 || events[0].QuantityDelta != -1 || events[0].PurchaseEventID == nil || *events[0].PurchaseEventID != old.ID {
 		t.Fatal(events, e)
 	}
-	if _, _, e = s.AmendPurchase(ctx, "stale", old.ID, change); !errors.Is(e, ledger.ErrConflict) {
+	if _, _, e = s.AmendAcquisition(ctx, "stale", old.ID, change); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
 	deletion := ledger.PurchaseDeletion{ExpectedUpdatedAt: updated.UpdatedAt}
-	if _, replayed, e = s.DeletePurchase(ctx, "delete", old.ID, deletion); e != nil || replayed {
+	if _, replayed, e = s.DeleteAcquisition(ctx, "delete", old.ID, deletion); e != nil || replayed {
 		t.Fatal(e)
 	}
-	if _, replayed, e = s.DeletePurchase(ctx, "delete", old.ID, deletion); e != nil || !replayed {
+	if _, replayed, e = s.DeleteAcquisition(ctx, "delete", old.ID, deletion); e != nil || !replayed {
 		t.Fatal(e)
 	}
-	if _, e = s.GetPurchase(ctx, old.ID); !errors.Is(e, ErrNotFound) {
+	if _, e = s.GetAcquisition(ctx, old.ID); !errors.Is(e, ErrNotFound) {
 		t.Fatal(e)
 	}
 	countTable(t, s, "purchase_events", 1)
 	countTable(t, s, "purchase_revisions", 2)
-	countTable(t, s, "expenses", 0)
+	countTable(t, s, "money_transactions", 0)
 	item, _ = s.Get(ctx, item.ID)
 	if item.Quantity != 0 || item.UnitPriceCents != nil {
 		t.Fatal(item)
 	}
-	purchases, e := s.Purchases(ctx, ledger.HistoryFilter{})
+	purchases, e := s.Acquisitions(ctx, ledger.HistoryFilter{})
 	if e != nil || len(purchases) != 0 {
 		t.Fatal(purchases, e)
 	}
@@ -85,37 +87,33 @@ func TestPurchaseAmendPreservesConsumptionAndRollsBack(t *testing.T) {
 	}
 	change := amendment(p)
 	change.Items[0].Quantity = 3
-	change.TotalAmount = 1200
-	change.Items[0].UnitPrice = 400
-	change.Items[0].Subtotal = 1200
-	updated, _, e := s.AmendPurchase(ctx, "edit", p.ID, change)
+	updated, _, e := s.AmendAcquisition(ctx, "edit", p.ID, change)
 	if e != nil {
 		t.Fatal(e)
 	}
 	item, _ := s.Get(ctx, p.Items[0].ItemID)
-	if item.Quantity != 2 || item.UnitPriceCents == nil || *item.UnitPriceCents != 400 {
+	if item.Quantity != 2 {
 		t.Fatal(item)
 	}
 	total, _ := s.ExpenseTotal(ctx, ledger.HistoryFilter{})
-	if total != 1200 {
+	if total != 0 {
 		t.Fatal(total)
 	}
-	if _, _, e = s.DeletePurchase(ctx, "bad-delete", p.ID, ledger.PurchaseDeletion{ExpectedUpdatedAt: updated.UpdatedAt}); !errors.Is(e, ledger.ErrConflict) {
+	if _, _, e = s.DeleteAcquisition(ctx, "bad-delete", p.ID, ledger.PurchaseDeletion{ExpectedUpdatedAt: updated.UpdatedAt}); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
 	fail := amendment(updated)
 	fail.Items[0].Quantity = 0.5
-	fail.TotalAmount = 100
-	if _, _, e = s.AmendPurchase(ctx, "bad-edit", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
+	if _, _, e = s.AmendAcquisition(ctx, "bad-edit", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
 	fail = amendment(updated)
 	fail.Items[0].Unit = "升"
-	if _, _, e = s.AmendPurchase(ctx, "bad-unit", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
+	if _, _, e = s.AmendAcquisition(ctx, "bad-unit", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
-	current, _ := s.GetPurchase(ctx, p.ID)
-	if current.UpdatedAt != updated.UpdatedAt || current.TotalAmount != 1200 {
+	current, _ := s.GetAcquisition(ctx, p.ID)
+	if current.UpdatedAt != updated.UpdatedAt || current.TotalAmount != 0 {
 		t.Fatal(current)
 	}
 	item, _ = s.Get(ctx, item.ID)
@@ -124,34 +122,28 @@ func TestPurchaseAmendPreservesConsumptionAndRollsBack(t *testing.T) {
 	}
 	countTable(t, s, "purchase_revisions", 1)
 	total, _ = s.ExpenseTotal(ctx, ledger.HistoryFilter{})
-	if total != 1200 {
+	if total != 0 {
 		t.Fatal(total)
-	}
-	fail = amendment(updated)
-	fail.TotalAmount = 1100
-	if _, _, e = s.AmendPurchase(ctx, "money", p.ID, fail); e != nil {
-		t.Fatal(e)
 	}
 	countTable(t, s, "inventory_events", 3)
 }
-func TestPurchaseSharedUnitsAndPriceRestoration(t *testing.T) {
+func TestAcquisitionSharedUnitsAndCancellation(t *testing.T) {
 	s := ledgerDB(t)
 	ctx := context.Background()
 	first := mustPurchase(t, s, "first", colaPurchase("瓶", 2))
 	in := colaPurchase("瓶", 1)
-	in.PurchasedAt = "2099-01-01T00:00:00Z"
-	in.Items[0].UnitPrice = 700
+	in.OccurredAt = "2099-01-01T00:00:00Z"
 	second := mustPurchase(t, s, "second", in)
 	change := amendment(first)
 	change.Items[0].Unit = "升"
-	if _, _, e := s.AmendPurchase(ctx, "units", first.ID, change); !errors.Is(e, ledger.ErrConflict) {
+	if _, _, e := s.AmendAcquisition(ctx, "units", first.ID, change); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
-	if _, _, e := s.DeletePurchase(ctx, "delete", second.ID, ledger.PurchaseDeletion{ExpectedUpdatedAt: second.UpdatedAt}); e != nil {
+	if _, _, e := s.DeleteAcquisition(ctx, "delete", second.ID, ledger.PurchaseDeletion{ExpectedUpdatedAt: second.UpdatedAt}); e != nil {
 		t.Fatal(e)
 	}
 	item, _ := s.Get(ctx, first.Items[0].ItemID)
-	if item.Quantity != 2 || item.UnitPriceCents == nil || *item.UnitPriceCents != 550 {
+	if item.Quantity != 2 {
 		t.Fatal(item)
 	}
 }
@@ -161,8 +153,8 @@ func TestPurchaseLineReplacementAndLateFailureRollback(t *testing.T) {
 	p := mustPurchase(t, s, "first", samplePurchase())
 	change := amendment(p)
 	change.Items = change.Items[:1]
-	change.Items = append(change.Items, ledger.PurchaseLine{Name: "苏打水", Quantity: 2, Unit: "罐", UnitPrice: 300, Subtotal: 600, ItemType: ledger.Consumable})
-	updated, _, e := s.AmendPurchase(ctx, "edit", p.ID, change)
+	change.Items = append(change.Items, ledger.AcquisitionLine{Name: "苏打水", Quantity: 2, Unit: "罐", ItemType: ledger.Consumable})
+	updated, _, e := s.AmendAcquisition(ctx, "edit", p.ID, change)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -174,13 +166,12 @@ func TestPurchaseLineReplacementAndLateFailureRollback(t *testing.T) {
 		t.Fatal(durable)
 	}
 	fail := amendment(updated)
-	fail.TotalAmount = 100
 	fail.Items[0].Quantity = 1
-	fail.Items = append(fail.Items, ledger.PurchaseLine{Name: "苏打水", Quantity: 1, Unit: "升", UnitPrice: 1, Subtotal: 1, ItemType: ledger.Consumable})
-	if _, _, e = s.AmendPurchase(ctx, "late-failure", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
+	fail.Items = append(fail.Items, ledger.AcquisitionLine{Name: "苏打水", Quantity: 1, Unit: "升", ItemType: ledger.Consumable})
+	if _, _, e = s.AmendAcquisition(ctx, "late-failure", p.ID, fail); !errors.Is(e, ledger.ErrConflict) {
 		t.Fatal(e)
 	}
-	current, _ := s.GetPurchase(ctx, p.ID)
+	current, _ := s.GetAcquisition(ctx, p.ID)
 	if current.TotalAmount != updated.TotalAmount || len(current.Items) != 2 {
 		t.Fatal(current)
 	}

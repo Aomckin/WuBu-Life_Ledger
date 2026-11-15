@@ -106,8 +106,9 @@ function bindEvents() {
 async function refreshSettings() {
   try {
     const settings = await request("/api/v1/intake/settings");
-    elements.autoAnalyze.checked = settings.auto_analyze;
-    elements.autoAnalyzeNote.textContent = "仅对新上传的内容生效。";
+    elements.autoAnalyze.checked = settings.auto_analyze && settings.ai_available !== false;
+    elements.autoAnalyze.disabled = settings.ai_available === false;
+    elements.autoAnalyzeNote.textContent = settings.ai_available === false ? "未配置 AI 分析，可继续手动处理。" : "仅对新上传的内容生效。";
   } catch {
     elements.autoAnalyze.disabled = true;
     elements.autoAnalyzeNote.textContent = "收件箱设置暂不可用。";

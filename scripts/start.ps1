@@ -1,4 +1,9 @@
-param([ValidateRange(1,65535)][int]$Port = 8026, [switch]$NoBuild, [switch]$Background)
+param(
+    [ValidateRange(1,65535)][int]$Port = 8026,
+    [string]$DatabasePath = '',
+    [switch]$NoBuild,
+    [switch]$Background
+)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $projectRoot
@@ -20,12 +25,17 @@ if (-not $NoBuild -or -not (Test-Path -LiteralPath $binary)) {
         $env:GOMODCACHE = Join-Path $projectRoot '.tools\mod-cache'
     }
     New-Item -ItemType Directory -Force (Split-Path $binary -Parent) | Out-Null
-    & $goCommand build -trimpath -ldflags '-s -w -X main.version=0.4.0' -o $binary ./cmd/stockroom
+    & $goCommand build -trimpath -ldflags '-s -w -X main.version=1.0.0-rc.2' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Wubu build failed' }
 }
 $env:LISTEN_ADDR = "127.0.0.1:$Port"
-$env:DATABASE_PATH = Join-Path $projectRoot 'data\wubu.db'
-Write-Host "物簿 v0.4.0: http://127.0.0.1:$Port (Ctrl+C 停止)"
+$env:DATABASE_PATH = if ($DatabasePath) {
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DatabasePath)
+} else {
+    Join-Path $projectRoot 'data\wubu.db'
+}
+Write-Host "数据库 $env:DATABASE_PATH"
+Write-Host "物簿 v1.0.0-rc.2: http://127.0.0.1:$Port (Ctrl+C 停止)"
 if ($Background) {
     New-Item -ItemType Directory -Force (Split-Path $processRecord -Parent) | Out-Null
     $process = Start-Process -FilePath $binary -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $projectRoot '.runtime\app.out.log') -RedirectStandardError (Join-Path $projectRoot '.runtime\app.err.log')
