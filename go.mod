@@ -1,13 +1,13 @@
 module stockroom
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/deb-sig/double-entry-generator/v2 v2.16.0
 	github.com/google/uuid v1.6.0
 	github.com/shakinm/xlsReader v0.9.12
 	github.com/xuri/excelize/v2 v2.11.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.57.0
 )
 
