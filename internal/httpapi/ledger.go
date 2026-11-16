@@ -36,8 +36,6 @@ func (a *API) registerLedger(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/items/{id}/aliases", a.listAliases)
 	m.HandleFunc("GET /api/v1/expenses", a.listExpenses)
 	m.HandleFunc("GET /api/v1/ledger/summary", a.ledgerSummary)
-	// Retain the mother project's editable inventory at /inventory.
-	m.HandleFunc("GET /inventory", a.serveInventory)
 }
 
 func (a *API) ledgerError(w http.ResponseWriter, r *http.Request, e error) {
@@ -277,10 +275,4 @@ func (a *API) ledgerSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, out)
-}
-func (a *API) serveInventory(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(200)
-	w.Write(a.inventoryPage)
 }

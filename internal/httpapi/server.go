@@ -27,20 +27,16 @@ import (
 const maxBodyBytes = 1 << 20
 
 type API struct {
-	store         *store.Store
-	version       string
-	logger        *slog.Logger
-	static        http.Handler
-	staticFS      fs.FS
-	index         []byte
-	inventoryPage []byte
-	inbox         []byte
-	quicklist     []byte
-	openAPI       []byte
-	categories    map[string]bool
-	analyzer      ai.Analyzer
-	media         *media.Processor
-	analysisMu    sync.Mutex
+	store      *store.Store
+	version    string
+	logger     *slog.Logger
+	static     http.Handler
+	staticFS   fs.FS
+	openAPI    []byte
+	categories map[string]bool
+	analyzer   ai.Analyzer
+	media      *media.Processor
+	analysisMu sync.Mutex
 }
 
 type errorBody struct {
@@ -70,22 +66,6 @@ func New(database *store.Store, version string, logger *slog.Logger, analyzer ai
 	if err != nil {
 		return nil, fmt.Errorf("open embedded assets: %w", err)
 	}
-	index, err := web.ReadFile("index.html")
-	if err != nil {
-		return nil, fmt.Errorf("read embedded index: %w", err)
-	}
-	ledgerPage, err := web.ReadFile("ledger.html")
-	if err != nil {
-		return nil, err
-	}
-	inbox, err := web.ReadFile("inbox.html")
-	if err != nil {
-		return nil, fmt.Errorf("read embedded inbox: %w", err)
-	}
-	quicklist, err := web.ReadFile("quicklist.html")
-	if err != nil {
-		return nil, fmt.Errorf("read embedded quicklist: %w", err)
-	}
 	openAPI, err := web.ReadFile("openapi.json")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded OpenAPI document: %w", err)
@@ -102,10 +82,13 @@ func New(database *store.Store, version string, logger *slog.Logger, analyzer ai
 	api := &API{
 		store: database, version: version, logger: logger,
 		static: http.FileServer(http.FS(staticFS)), staticFS: staticFS,
-		index: ledgerPage, inventoryPage: index, inbox: inbox, quicklist: quicklist, openAPI: openAPI, categories: categories,
+		openAPI: openAPI, categories: categories,
 		analyzer: analyzer, media: media.New(transcriber),
 	}
 	mux := http.NewServeMux()
+	if err := registerPages(mux); err != nil {
+		return nil, err
+	}
 	api.registerLedger(mux)
 	mux.HandleFunc("GET /healthz", api.health)
 	mux.HandleFunc("GET /api/v1", api.apiRoot)
@@ -136,9 +119,7 @@ func New(database *store.Store, version string, logger *slog.Logger, analyzer ai
 	mux.HandleFunc("POST /api/v1/intake/{id}/analysis", api.analyzeIntake)
 	mux.HandleFunc("GET /api/v1/intake/{id}/attachments/{attachment_id}", api.getIntakeAttachment)
 	mux.HandleFunc("/api/", api.apiNotFound)
-	mux.HandleFunc("GET /kiquicklist", api.serveQuicklist)
-	mux.HandleFunc("GET /inbox", api.serveInbox)
-	mux.HandleFunc("/", api.serveApp)
+	mux.HandleFunc("/", api.serveAssets)
 	return api.middleware(mux), nil
 }
 
@@ -348,19 +329,38 @@ func (a *API) parseListFilter(r *http.Request) (inventory.ListFilter, map[string
 	return filter, fields
 }
 
-func (a *API) serveApp(w http.ResponseWriter, r *http.Request) {
+func registerPages(mux *http.ServeMux) error {
+	for file, paths := range map[string][]string{
+		"home.html":      {"/{$}"},
+		"items.html":     {"/items"},
+		"finance.html":   {"/finance"},
+		"inbox.html":     {"/ai", "/inbox"},
+		"index.html":     {"/inventory"},
+		"quicklist.html": {"/kiquicklist"},
+		"weekly.html":    {"/weekly-sync"},
+		"financial.html": {"/financial-inbox"},
+	} {
+		page, err := web.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("read embedded page %s: %w", file, err)
+		}
+		for _, path := range paths {
+			mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache")
+				if r.Method != http.MethodHead {
+					_, _ = w.Write(page)
+				}
+			})
+		}
+	}
+	return nil
+}
+
+func (a *API) serveAssets(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		a.errorResponse(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.", nil)
-		return
-	}
-	if r.URL.Path == "/" {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-		if r.Method != http.MethodHead {
-			_, _ = w.Write(a.index)
-		}
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/assets/") {
@@ -377,24 +377,6 @@ func (a *API) serveApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.NotFound(w, r)
-}
-
-func (a *API) serveInbox(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	if r.Method != http.MethodHead {
-		_, _ = w.Write(a.inbox)
-	}
-}
-
-func (a *API) serveQuicklist(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	if r.Method != http.MethodHead {
-		_, _ = w.Write(a.quicklist)
-	}
 }
 
 func (a *API) apiNotFound(w http.ResponseWriter, r *http.Request) {

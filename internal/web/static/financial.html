@@ -5,10 +5,25 @@
 <title>物簿 · 财务收件箱</title><link rel="icon" href="/assets/favicon.svg">
 <link rel="stylesheet" href="/assets/app.css"><link rel="stylesheet" href="/assets/ledger.css">
 <link rel="stylesheet" href="/assets/financial.css"><script src="/assets/financial.js?v=1.0.1" defer></script>
+  <link rel="stylesheet" href="/assets/workspace.css">
 </head>
-<body>
-<header class="topbar"><a class="brand" href="/">物簿 · 财务收件箱</a><a href="/">返回账簿</a></header>
-<main class="page-shell">
+<body class="workspace workspace--finance">
+<header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">金额账户</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance is-active" aria-current="page">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
+    </div>
+  </header>
+<main class="workspace-main page-shell">
+<nav class="ledger-nav" aria-label="资金页面"><a class="button" href="/finance">资金总览</a><a class="button" href="/weekly-sync">每周同步</a><a class="button" href="/financial-inbox">财务收件箱</a></nav>
 <h1>财务收件箱</h1><div id="financial-message" role="status"></div>
 <nav class="ledger-nav" aria-label="流水视图">
 <button data-tab="review" class="button">待确认</button><button data-tab="booked" class="button">已入账</button><button data-tab="processed" class="button">已处理证据</button>

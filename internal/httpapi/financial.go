@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"stockroom/internal/ledger"
 	"strconv"
@@ -22,21 +21,6 @@ func (a *API) registerFinancial(m *http.ServeMux) {
 		return a.store.SetFinancialSettings(r.Context(), r.Header.Get("Idempotency-Key"), p)
 	}))
 
-	m.HandleFunc("GET /financial-inbox", func(w http.ResponseWriter, r *http.Request) {
-		b, e := a.staticFS.Open("financial.html")
-		if e != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer b.Close()
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data, e := io.ReadAll(b)
-		if e != nil {
-			a.ledgerError(w, r, e)
-			return
-		}
-		w.Write(data)
-	})
 	m.HandleFunc("POST /api/v1/financial/semantic-evidence", writeFinancial(a, 201, func(r *http.Request, p ledger.SemanticEvidence) (any, bool, error) {
 		return a.store.AttachSemanticEvidence(r.Context(), r.Header.Get("Idempotency-Key"), p)
 	}))

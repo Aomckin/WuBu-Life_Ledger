@@ -1,0 +1,629 @@
+/* ==========================================================================
+   Wubu (物簿) Workspace Reusable CSS Shell
+   Scoped strictly under .workspace
+   ========================================================================== */
+
+.workspace {
+  --ws-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+  --ws-font-mono: "SF Mono", "Cascadia Code", "Consolas", Menlo, monospace;
+
+  /* Editorial neutral palette */
+  --ws-bg: #f7f6f2;
+  --ws-surface: #ffffff;
+  --ws-surface-subtle: #fbfbf9;
+  --ws-surface-muted: #f2f0ea;
+  --ws-border: #e3e0d8;
+  --ws-border-strong: #c8c4b7;
+  --ws-text: #1c201e;
+  --ws-text-muted: #5e6461;
+  --ws-text-subtle: #8a918e;
+
+  /* Three Distinct Accents */
+  --ws-accent-items: #1c795d;
+  --ws-accent-items-bg: #edf6f2;
+  --ws-accent-items-border: #9ecdbe;
+
+  --ws-accent-finance: #27547e;
+  --ws-accent-finance-bg: #edf3f8;
+  --ws-accent-finance-border: #a2c1de;
+
+  --ws-accent-ai: #613e6d;
+  --ws-accent-ai-bg: #f5eff7;
+  --ws-accent-ai-border: #c8b0d2;
+
+  /* Active Workspace Theme (Defaults to Hub brand accent) */
+  --ws-theme-accent: #2c3330;
+  --ws-theme-accent-bg: #f0eee8;
+  --ws-theme-accent-border: #bab6aa;
+
+  /* Layout & Elevation */
+  --ws-max-width: 1360px;
+  --ws-radius-sm: 4px;
+  --ws-radius-md: 8px;
+  --ws-radius-lg: 12px;
+  --ws-shadow-sm: 0 1px 3px rgba(28, 32, 30, 0.04);
+  --ws-shadow-md: 0 4px 12px rgba(28, 32, 30, 0.06);
+  --ws-shadow-hover: 0 8px 20px rgba(28, 32, 30, 0.08);
+  --ws-transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  margin: 0;
+  padding: 0;
+  background-color: var(--ws-bg);
+  color: var(--ws-text);
+  font-family: var(--ws-font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+}
+
+.workspace *,
+.workspace *::before,
+.workspace *::after {
+  box-sizing: inherit;
+}
+
+/* ==========================================================================
+   Body Class Route Modifiers
+   ========================================================================== */
+
+body.workspace.workspace--items {
+  --ws-theme-accent: var(--ws-accent-items);
+  --ws-theme-accent-bg: var(--ws-accent-items-bg);
+  --ws-theme-accent-border: var(--ws-accent-items-border);
+}
+
+body.workspace.workspace--finance {
+  --ws-theme-accent: var(--ws-accent-finance);
+  --ws-theme-accent-bg: var(--ws-accent-finance-bg);
+  --ws-theme-accent-border: var(--ws-accent-finance-border);
+}
+
+body.workspace.workspace--ai {
+  --ws-theme-accent: var(--ws-accent-ai);
+  --ws-theme-accent-bg: var(--ws-accent-ai-bg);
+  --ws-theme-accent-border: var(--ws-accent-ai-border);
+}
+
+/* ==========================================================================
+   Header & Module Switch
+   ========================================================================== */
+
+.workspace .workspace-header {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  background-color: rgba(247, 246, 242, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--ws-border);
+  width: 100%;
+}
+
+.workspace .workspace-header-inner {
+  max-width: var(--ws-max-width);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 3vw, 2.5rem);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace .workspace-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: var(--ws-text);
+  flex-shrink: 0;
+}
+
+.workspace .workspace-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background-color: var(--ws-theme-accent);
+  color: #ffffff;
+  border-radius: var(--ws-radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  transition: background-color var(--ws-transition);
+}
+
+.workspace .workspace-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ws-text);
+}
+
+.workspace .workspace-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 3px;
+  background-color: var(--ws-surface-muted);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-md);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.workspace .workspace-switch::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace .workspace-switch-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ws-text-muted);
+  text-decoration: none;
+  border-radius: var(--ws-radius-sm);
+  white-space: nowrap;
+  transition: color var(--ws-transition), background-color var(--ws-transition),
+    box-shadow var(--ws-transition);
+}
+
+.workspace .workspace-switch-link:hover {
+  color: var(--ws-text);
+  background-color: rgba(255, 255, 255, 0.6);
+}
+
+.workspace .workspace-switch-link.is-active {
+  color: var(--ws-text);
+  background-color: var(--ws-surface);
+  font-weight: 600;
+  box-shadow: var(--ws-shadow-sm);
+}
+
+.workspace .workspace-switch-link--items.is-active,
+.workspace--items .workspace-switch-link--items {
+  color: var(--ws-accent-items);
+}
+
+.workspace .workspace-switch-link--finance.is-active,
+.workspace--finance .workspace-switch-link--finance {
+  color: var(--ws-accent-finance);
+}
+
+.workspace .workspace-switch-link--ai.is-active,
+.workspace--ai .workspace-switch-link--ai {
+  color: var(--ws-accent-ai);
+}
+
+/* ==========================================================================
+   Main Shell, Hero, and Editorial Layout
+   ========================================================================== */
+
+.workspace .workspace-main {
+  width: 100%;
+  max-width: var(--ws-max-width);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 3.5vw, 3rem) clamp(1rem, 3vw, 2.5rem);
+}
+
+.workspace .workspace-hero {
+  margin-bottom: clamp(1.75rem, 3vw, 2.75rem);
+  padding-bottom: clamp(1.25rem, 2.5vw, 2rem);
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.workspace .workspace-hero-inner {
+  max-width: 820px;
+}
+
+.workspace .workspace-hero-title {
+  margin: 0 0 0.5rem 0;
+  font-size: clamp(1.5rem, 2.8vw, 2.125rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ws-text);
+  line-height: 1.25;
+}
+
+.workspace .workspace-intro {
+  margin: 0;
+  font-size: clamp(0.9375rem, 1.2vw, 1.0625rem);
+  color: var(--ws-text-muted);
+  line-height: 1.65;
+}
+
+.workspace .workspace-section {
+  margin-bottom: 2.5rem;
+}
+
+/* ==========================================================================
+   Launcher Cards (Home Route)
+   ========================================================================== */
+
+.workspace .workspace-launcher {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(1rem, 2vw, 1.75rem);
+  align-items: stretch;
+}
+
+.workspace .workspace-card {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ws-surface);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-lg);
+  padding: clamp(1.25rem, 2vw, 1.75rem);
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--ws-shadow-sm);
+  transition: transform var(--ws-transition), border-color var(--ws-transition),
+    box-shadow var(--ws-transition);
+  position: relative;
+  min-height: 220px;
+}
+
+.workspace .workspace-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ws-shadow-hover);
+}
+
+.workspace .workspace-card:focus-visible {
+  outline: 2px solid var(--ws-theme-accent);
+  outline-offset: 2px;
+}
+
+.workspace .workspace-card--items:hover {
+  border-color: var(--ws-accent-items-border);
+}
+
+.workspace .workspace-card--finance:hover {
+  border-color: var(--ws-accent-finance-border);
+}
+
+.workspace .workspace-card--ai:hover {
+  border-color: var(--ws-accent-ai-border);
+}
+
+.workspace .workspace-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.875rem;
+}
+
+.workspace .workspace-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--ws-radius-md);
+  font-size: 22px;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: background-color var(--ws-transition), color var(--ws-transition);
+}
+
+.workspace .workspace-card--items .workspace-card-icon {
+  background-color: var(--ws-accent-items-bg);
+  color: var(--ws-accent-items);
+}
+
+.workspace .workspace-card--finance .workspace-card-icon {
+  background-color: var(--ws-accent-finance-bg);
+  color: var(--ws-accent-finance);
+}
+
+.workspace .workspace-card--ai .workspace-card-icon {
+  background-color: var(--ws-accent-ai-bg);
+  color: var(--ws-accent-ai);
+}
+
+.workspace .workspace-card-heading {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 600;
+  color: var(--ws-text);
+  letter-spacing: -0.01em;
+}
+
+.workspace .workspace-card-desc {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.9375rem;
+  color: var(--ws-text-muted);
+  line-height: 1.6;
+  flex-grow: 1;
+}
+
+.workspace .workspace-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.75rem;
+  background-color: var(--ws-surface-subtle);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-sm);
+  font-size: 0.8125rem;
+  color: var(--ws-text-muted);
+  font-family: var(--ws-font-mono);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.workspace .workspace-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--ws-border-strong);
+  flex-shrink: 0;
+}
+
+.workspace .workspace-card--items .workspace-status-dot {
+  background-color: var(--ws-accent-items);
+}
+
+.workspace .workspace-card--finance .workspace-status-dot {
+  background-color: var(--ws-accent-finance);
+}
+
+.workspace .workspace-card--ai .workspace-status-dot {
+  background-color: var(--ws-accent-ai);
+}
+
+.workspace .workspace-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Ledger Ecosystem Compatibility (.page-shell, .ledger-panel, .ledger-nav)
+   ========================================================================== */
+
+.workspace .page-shell {
+  width: 100%;
+}
+
+.workspace .ledger-panel {
+  background-color: var(--ws-surface);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-lg);
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  box-shadow: var(--ws-shadow-sm);
+  margin-bottom: 1.75rem;
+}
+
+.workspace .ledger-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--ws-border);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace .ledger-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace .ledger-nav a,
+.workspace .ledger-nav button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ws-text-muted);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--ws-radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--ws-transition), background-color var(--ws-transition);
+}
+
+.workspace .ledger-nav a:hover,
+.workspace .ledger-nav button:hover {
+  color: var(--ws-text);
+  background-color: var(--ws-surface-muted);
+}
+
+.workspace .ledger-nav a.is-active,
+.workspace .ledger-nav button.is-active {
+  color: var(--ws-theme-accent);
+  background-color: var(--ws-theme-accent-bg);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Table Overflow Policies (.ledger-table-wrap)
+   Desktop: Space-filling high density
+   Mobile/Phone: Contained horizontal scroll
+   ========================================================================== */
+
+.workspace .ledger-table-wrap {
+  width: 100%;
+  margin: 1rem 0;
+  background-color: var(--ws-surface);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-md);
+  box-shadow: var(--ws-shadow-sm);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.workspace .ledger-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.workspace .ledger-table-wrap th,
+.workspace .ledger-table-wrap td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--ws-border);
+  vertical-align: middle;
+}
+
+.workspace .ledger-table-wrap th {
+  background-color: var(--ws-surface-subtle);
+  color: var(--ws-text-muted);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.workspace .ledger-table-wrap tr:last-child td {
+  border-bottom: none;
+}
+
+.workspace .ledger-table-wrap tr:hover td {
+  background-color: rgba(247, 246, 242, 0.5);
+}
+
+.workspace .ledger-table-wrap td.is-num,
+.workspace .ledger-table-wrap th.is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--ws-font-mono);
+}
+
+/* Desktop Expansion: Expand space cleanly when width allows */
+@media (min-width: 900px) {
+  .workspace .ledger-table-wrap table {
+    table-layout: auto;
+    white-space: normal;
+  }
+}
+
+/* Contained Scroll: Phone & Small Viewports (<= 899px down to 390px) */
+@media (max-width: 899px) {
+  .workspace .ledger-table-wrap {
+    overflow-x: auto;
+    border-radius: var(--ws-radius-sm);
+  }
+
+  .workspace .ledger-table-wrap table {
+    min-width: 580px;
+    white-space: nowrap;
+  }
+
+  .workspace .ledger-table-wrap th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+}
+
+/* ==========================================================================
+   Native Dialog Enhancements
+   ========================================================================== */
+
+.workspace dialog {
+  border: 1px solid var(--ws-border-strong);
+  border-radius: var(--ws-radius-lg);
+  background-color: var(--ws-surface);
+  color: var(--ws-text);
+  box-shadow: var(--ws-shadow-hover);
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  max-width: min(90vw, 560px);
+  margin: auto;
+}
+
+.workspace dialog::backdrop {
+  background-color: rgba(28, 32, 30, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ==========================================================================
+   Responsive Adaptations (390px Mobile Viewport)
+   ========================================================================== */
+
+@media (max-width: 860px) {
+  .workspace .workspace-launcher {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .workspace .workspace-card {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .workspace .workspace-header-inner {
+    height: auto;
+    padding: 0.625rem 0.875rem;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+  }
+
+  .workspace .workspace-switch {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .workspace .workspace-switch-link {
+    flex: 1;
+    text-align: center;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .workspace .workspace-main {
+    padding: 1.25rem 0.875rem 2rem 0.875rem;
+  }
+
+  .workspace .workspace-card {
+    padding: 1.25rem;
+  }
+
+  .workspace .workspace-card-desc {
+    margin-bottom: 1.125rem;
+  }
+
+  .workspace .ledger-panel {
+    padding: 1rem;
+    border-radius: var(--ws-radius-md);
+  }
+}
+
+.workspace-workbench{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap}
+.workspace-period{display:grid;gap:.35rem}
+.workspace .inventory-toolbar{display:flex;justify-content:flex-end;padding-block:1rem 0}
+.workspace .inbox-shell.workspace-main{max-width:var(--ws-max-width)}
+.workspace .button.button-primary{background:var(--ws-theme-accent);border-color:var(--ws-theme-accent);color:#fff}
+.workspace .button.button-primary:hover{filter:brightness(.94)}
+.workspace .workspace-status-dot{flex-shrink:0}
+.workspace [data-state=unavailable] .workspace-status-dot{background:#80796e}
+.workspace .ledger-table-wrap td{overflow-wrap:anywhere}
+.workspace .existing-links{grid-column:1/-1}
+@media(min-width:621px){
+  .workspace .ledger-table-wrap table.ledger-table{min-width:0;white-space:normal}
+  .workspace .ledger-table-wrap .ledger-table th{white-space:normal}
+}
+@media(max-width:620px){
+  .workspace .ledger-table-wrap table.ledger-table{display:block;min-width:0;white-space:normal}
+  .workspace .ledger-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .workspace .ledger-table tbody{display:block}
+  .workspace .ledger-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;padding:.85rem;border-bottom:1px solid var(--ws-border)}
+  .workspace .ledger-table tbody tr:last-child{border:0}
+  .workspace .ledger-table-wrap .ledger-table td{padding:0;border:0;max-width:none;min-width:0}
+  .workspace .ledger-table td::before{content:attr(data-column);display:block;margin-bottom:.2rem;font-size:.75rem;color:var(--ws-text-muted)}
+  .workspace .ledger-table td:last-child:nth-child(odd){grid-column:1/-1}
+}

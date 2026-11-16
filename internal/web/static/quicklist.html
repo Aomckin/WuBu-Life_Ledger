@@ -9,18 +9,25 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/quicklist.css?v=zh-1">
   <script src="/assets/zh.js?v=purchase-2" defer></script><script src="/assets/quicklist.js?v=zh-1" defer></script>
+  <link rel="stylesheet" href="/assets/workspace.css">
 </head>
-<body>
-  <header class="quick-header">
-    <a class="back-link" href="/" aria-label="返回账簿首页">←</a>
-    <div class="brand">
-      <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
-      <span><strong>快速盘点</strong><small>内部盘点工具</small></span>
+<body class="workspace workspace--items">
+  <header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">物品本体</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items is-active" aria-current="page">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
     </div>
-    <span class="internal-badge">内部工具</span>
   </header>
 
-  <main>
+  <main class="workspace-main ">
     <section class="intro" aria-labelledby="page-title">
       <p class="eyebrow">快速记录</p>
       <h1 id="page-title">快速清点家中库存。</h1>

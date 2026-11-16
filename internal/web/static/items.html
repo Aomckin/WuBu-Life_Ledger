@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>物簿 · 物品本体</title><link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/app.css"><link rel="stylesheet" href="/assets/ledger.css"><link rel="stylesheet" href="/assets/workspace.css"><script src="/assets/zh.js" defer></script><script src="/assets/workspace-core.js" defer></script><script src="/assets/items-workspace.js" defer></script></head>
+<body class="workspace workspace--items">
+<header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">物品本体</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items is-active" aria-current="page">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
+    </div>
+  </header>
+<main class="page-shell workspace-main"><header class="workspace-hero workspace-workbench"><div><h1 class="workspace-hero-title">物品本体</h1><div class="ledger-actions"><button id="new-purchase" class="button button-primary" type="button">记购入</button></div></div><label class="workspace-period">月份 <input type="month" id="month"></label></header>
+<div id="message" role="status" aria-live="polite"></div><nav class="ledger-nav" aria-label="物品本体"><button type="button" data-view="home" class="button is-active">总览</button><button type="button" data-view="inventory" class="button">在库</button><button type="button" data-view="items" class="button">全部物品</button><button type="button" data-view="purchases" class="button">购入</button><button type="button" data-view="durables" class="button">耐用品</button><button type="button" data-view="maintenance" class="button">维护</button><button type="button" data-view="history" class="button">库存历史</button><a class="button" href="/inventory">库存编辑</a></nav>
+<section id="content" aria-live="polite"></section><div id="paging" hidden><button id="previous" class="button">上一页</button><span id="page-label"></span><button id="next" class="button">下一页</button></div></main>
+<dialog id="purchase-dialog"><form id="purchase-form"><div class="dialog-head"><h2 id="purchase-title">记录购买</h2><button type="button" data-close="purchase-dialog" aria-label="关闭">×</button></div><div id="purchase-lines"></div><details id="purchase-options"><summary>购买时间、商家和备注</summary><div class="form-grid"><label>购买时间<input name="purchased_at" type="datetime-local" required></label><label>商家<input name="merchant" maxlength="200"></label><label>备注<input name="note" maxlength="2000"></label></div></details><button type="button" class="button button-secondary" id="add-line">＋ 商品</button><div class="dialog-actions"><button type="button" class="button button-secondary" data-close="purchase-dialog">取消</button><button class="button button-primary" id="save-purchase" type="submit">保存购入</button></div><p class="form-error" id="purchase-error" role="alert"></p></form></dialog>
+<dialog id="action-dialog"><form id="action-form"><div class="dialog-head"><h2 id="action-title"></h2><button type="button" data-close="action-dialog" aria-label="关闭">×</button></div><div id="action-fields"></div><div class="dialog-actions"><button class="button button-primary" type="submit">确认记录</button></div><p class="form-error" id="action-error" role="alert"></p></form></dialog>
+<dialog id="detail-dialog"><div class="dialog-head"><h2 id="detail-title"></h2><button type="button" data-close="detail-dialog" aria-label="关闭">×</button></div><div id="detail-content"></div></dialog>
+<dialog id="purchase-delete-dialog" aria-labelledby="purchase-delete-title"><div class="dialog-head"><h2 id="purchase-delete-title">删除购买记录？</h2><button type="button" data-close="purchase-delete-dialog" aria-label="关闭">×</button></div><p id="purchase-delete-summary"></p><p class="helper">删除后撤销对应的库存增加，保留操作历史。已有消耗导致库存不足时，将提示核对。</p><p id="purchase-delete-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="button button-secondary" data-close="purchase-delete-dialog">取消</button><button class="button button-danger" id="confirm-purchase-delete">确认删除</button></div></dialog>
+<dialog id="cash-dialog"><form id="cash-form"><div class="dialog-head"><h2 id="cash-title"></h2><button type="button" data-close="cash-dialog" aria-label="关闭">×</button></div><div id="cash-fields" class="form-grid"></div><div class="dialog-actions"><button class="button button-primary" type="submit">确认记录</button></div><p id="cash-error" class="form-error" role="alert"></p></form></dialog>
+<datalist id="purchase-units"></datalist>
+</body></html>

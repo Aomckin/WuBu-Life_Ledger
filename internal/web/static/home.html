@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>物簿</title>
+  <link rel="icon" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/workspace.css">
+  <script src="/assets/home.js" defer></script>
+</head>
+<body class="workspace workspace--hub">
+  <header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">物簿</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link is-active" aria-current="page">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="workspace-main page-shell">
+    <header class="workspace-hero">
+      <div class="workspace-hero-inner">
+        <h1 class="workspace-hero-title">物簿工作区</h1>
+      </div>
+    </header>
+
+    <section class="workspace-section" aria-label="模块入口">
+      <div class="workspace-launcher">
+        <a href="/items" class="workspace-card workspace-card--items">
+          <div class="workspace-card-header">
+            <span class="material-symbols workspace-card-icon" aria-hidden="true">category</span>
+            <h2 class="workspace-card-heading">物品本体</h2>
+          </div>
+          <p class="workspace-card-desc">查库存，记购入、消耗和维护。</p>
+          <div class="workspace-card-status" data-module="items" aria-live="polite">
+            <span class="workspace-status-dot" aria-hidden="true"></span>
+            <span class="workspace-status-text">正在获取概览…</span>
+          </div>
+        </a>
+
+        <a href="/finance" class="workspace-card workspace-card--finance">
+          <div class="workspace-card-header">
+            <span class="material-symbols workspace-card-icon" aria-hidden="true">description</span>
+            <h2 class="workspace-card-heading">金额账户</h2>
+          </div>
+          <p class="workspace-card-desc">看余额、记收支、同步原生账单。</p>
+          <div class="workspace-card-status" data-module="finance" aria-live="polite">
+            <span class="workspace-status-dot" aria-hidden="true"></span>
+            <span class="workspace-status-text">正在获取概览…</span>
+          </div>
+        </a>
+
+        <a href="/ai" class="workspace-card workspace-card--ai">
+          <div class="workspace-card-header">
+            <span class="material-symbols workspace-card-icon" aria-hidden="true">lightbulb</span>
+            <h2 class="workspace-card-heading">AI 辅助</h2>
+          </div>
+          <p class="workspace-card-desc">录入文字、图片或语音，审核库存建议。</p>
+          <div class="workspace-card-status" data-module="ai" aria-live="polite">
+            <span class="workspace-status-dot" aria-hidden="true"></span>
+            <span class="workspace-status-text">正在获取概览…</span>
+          </div>
+        </a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,4 +1,4 @@
-param([ValidateSet('test-v02-ui.cjs','test-v04-ui.cjs','test-v04-weekly-ui.cjs')][string]$BrowserTest = 'test-v02-ui.cjs', [string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '', [ValidatePattern('^[a-z0-9-]+$')][string]$ScreenshotPrefix = 'v02')
+param([ValidateSet('test-v02-ui.cjs','test-v04-ui.cjs','test-v04-weekly-ui.cjs','test-v102-ui.cjs')][string]$BrowserTest = 'test-v02-ui.cjs', [string]$PlaywrightModule = '', [string]$ScreenshotDirectory = '', [ValidatePattern('^[a-z0-9-]+$')][string]$ScreenshotPrefix = 'v02')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $projectRoot
@@ -12,7 +12,7 @@ $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $testDirectory = Join-Path $temporaryRoot ('wubu-v02-ui-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testDirectory | Out-Null
 $binary = Join-Path $testDirectory 'wubu-ui.exe'
-$variables = @('DATABASE_PATH','LISTEN_ADDR','WUBU_TEST_BASE_URL','WUBU_UI_OUTPUT','WUBU_PLAYWRIGHT_MODULE')
+$variables = @('DATABASE_PATH','LISTEN_ADDR','WUBU_TEST_BASE_URL','WUBU_UI_OUTPUT','WUBU_PLAYWRIGHT_MODULE','AI_BASE_URL','AI_MODEL','AI_TRANSCRIPTION_URL')
 $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $verificationProcess = $null
@@ -27,6 +27,9 @@ try {
     $env:LISTEN_ADDR = "127.0.0.1:$port"
     $env:WUBU_TEST_BASE_URL = "http://127.0.0.1:$port"
     $env:WUBU_UI_OUTPUT = $testDirectory
+    $env:AI_BASE_URL = ''
+    $env:AI_MODEL = ''
+    $env:AI_TRANSCRIPTION_URL = ''
     if ($PlaywrightModule) { $env:WUBU_PLAYWRIGHT_MODULE = $PlaywrightModule }
     $verificationProcess = Start-Process -FilePath $binary -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testDirectory 'stdout.log') -RedirectStandardError (Join-Path $testDirectory 'stderr.log')
     $ready = $false

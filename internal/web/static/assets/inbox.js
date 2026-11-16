@@ -25,9 +25,16 @@ const state = {
   saving: false,
   loading: false,
   pollTimer: null,
+  aiAvailable: false,
+  voice: null,
+  voiceStarting: false,
+  voiceTimer: null,
 };
 
 const elements = {
+  voiceButton: document.querySelector('#inbox-voice'),
+  history: document.querySelector('#analysis-history'),
+  historyList: document.querySelector('#analysis-history-list'),
   autoAnalyze: document.querySelector("#auto-analyze"),
   autoAnalyzeNote: document.querySelector("#auto-analyze-note"),
   captureForm: document.querySelector("#inbox-capture-form"),
@@ -84,12 +91,16 @@ async function initialize() {
   } catch {
     state.meta = DEFAULT_META;
   }
-  await Promise.all([refreshSettings(), refreshInbox()]);
+  await refreshSettings();
+  await refreshInbox();
 }
 
 function bindEvents() {
   elements.autoAnalyze.addEventListener("change", saveSettings);
   elements.captureForm.addEventListener("submit", submitCapture);
+  elements.voiceButton.addEventListener("click", recordVoice);
+  elements.history.addEventListener("toggle", () => { if (elements.history.open) refreshHistory(); });
+  window.addEventListener("pagehide", () => state.voice?.stream.getTracks().forEach(track => track.stop()));
   elements.files.addEventListener("change", () => {
     addFiles(elements.files.files);
     elements.files.value = "";
@@ -106,10 +117,12 @@ function bindEvents() {
 async function refreshSettings() {
   try {
     const settings = await request("/api/v1/intake/settings");
+    state.aiAvailable = settings.ai_available;
     elements.autoAnalyze.checked = settings.auto_analyze && settings.ai_available !== false;
     elements.autoAnalyze.disabled = settings.ai_available === false;
-    elements.autoAnalyzeNote.textContent = settings.ai_available === false ? "未配置 AI 分析，可继续手动处理。" : "仅对新上传的内容生效。";
+    elements.autoAnalyzeNote.textContent = settings.ai_available === false ? "未配置 AI 分析，可继续手动处理。" : "AI 已配置。自动分析只对新上传的内容生效。";
   } catch {
+    state.aiAvailable = false;
     elements.autoAnalyze.disabled = true;
     elements.autoAnalyzeNote.textContent = "收件箱设置暂不可用。";
   }
@@ -201,10 +214,82 @@ function removeFile(event) {
   renderFiles();
 }
 
+async function refreshHistory() {
+  elements.historyList.textContent = "正在加载…";
+  try {
+    const { entries } = await request("/api/v1/intake?status=reviewed&limit=50");
+    if (!entries.length) {
+      elements.historyList.textContent = "暂无已处理记录。";
+      return;
+    }
+    const list = document.createElement("ul");
+    for (const entry of entries) {
+      const line = document.createElement("li");
+      line.textContent = [sourceLabel(entry.source), entry.analysis?.summary || entry.text || "已处理"]
+        .map(value => value.slice(0, 240)).join(" · ");
+      list.append(line);
+    }
+    elements.historyList.replaceChildren(list);
+  } catch (error) {
+    elements.historyList.textContent = errorMessage(error);
+  }
+}
+
+async function recordVoice() {
+  if (state.saving || state.voiceStarting) return;
+  if (state.voice) {
+    if (state.voice.state === "recording") state.voice.stop();
+    return;
+  }
+  if (state.files.length >= MAX_BATCH_FILES) {
+    showError("本批次的文件已满。");
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    showError("此浏览器无法录音，可以上传已有音频文件。");
+    return;
+  }
+  const button = elements.voiceButton;
+  let stream;
+  state.voiceStarting = true;
+  button.disabled = true;
+  hideError();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    const parts = [];
+    recorder.addEventListener("dataavailable", event => { if (event.data.size) parts.push(event.data); });
+    recorder.addEventListener("stop", () => {
+      clearTimeout(state.voiceTimer);
+      stream.getTracks().forEach(track => track.stop());
+      state.voice = null;
+      button.textContent = "录制语音";
+      button.setAttribute("aria-pressed", "false");
+      if (!parts.length) return;
+      const type = (recorder.mimeType || parts[0].type || "audio/webm").split(";")[0];
+      const extension = ({ "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/webm": "webm" })[type] || "webm";
+      addFiles([new File(parts, "语音-" + Date.now() + "." + extension, { type })]);
+    }, { once: true });
+    recorder.addEventListener("error", () => showError("录音失败，可以上传已有音频文件。"), { once: true });
+    recorder.start();
+    state.voice = recorder;
+    state.voiceTimer = setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 120000);
+    button.textContent = "结束录音";
+    button.setAttribute("aria-pressed", "true");
+  } catch (error) {
+    stream?.getTracks().forEach(track => track.stop());
+    showError(error.name === "NotAllowedError" ? "未取得麦克风权限，可以上传已有音频文件。" : "录音未启动，请检查麦克风。");
+  } finally {
+    state.voiceStarting = false;
+    button.disabled = false;
+  }
+}
+
 async function submitCapture(event) {
   event.preventDefault();
   const text = elements.text.value.trim();
   if (state.saving) return;
+  if (state.voiceStarting || state.voice) { showError("请先结束录音。"); return; }
   if (!text && state.files.length === 0) {
     elements.text.focus();
     showError("请输入说明或选择至少一个文件。");
@@ -257,7 +342,7 @@ async function refreshInbox() {
     const result = await request("/api/v1/intake?status=pending&limit=100");
     state.entries = result.entries;
     renderInbox();
-    if (visibleEntries().some((entry) => entry.workflow_state === "queued" || entry.workflow_state === "analyzing")) {
+    if (state.aiAvailable && visibleEntries().some((entry) => entry.workflow_state === "queued" || entry.workflow_state === "analyzing")) {
       state.pollTimer = setTimeout(refreshInbox, 1600);
     }
   } catch (error) {
@@ -284,7 +369,7 @@ function renderInbox() {
 
   elements.applyReady.hidden = ready.length === 0;
   elements.applyReady.textContent = `应用 ${ready.length} 条就绪变更`;
-  const canAnalyze = entries.some((entry) => entry.workflow_state === "queued" || entry.workflow_state === "failed");
+  const canAnalyze = state.aiAvailable && entries.some((entry) => entry.workflow_state === "queued" || entry.workflow_state === "failed");
   elements.analyzeSelected.hidden = !canAnalyze;
   elements.analyzeSelected.textContent = state.selectedBatch ? "分析本批次" : "分析待处理内容";
 }
@@ -310,7 +395,7 @@ function renderSection(container, count, empty, entries, renderer) {
 }
 
 function renderProcessingEntry(entry) {
-  return baseEntry(entry, { state: entry.workflow_state === "analyzing" ? "正在分析" : "等待分析", tone: "processing" });
+  return baseEntry(entry, { state: state.aiAvailable ? (entry.workflow_state === "analyzing" ? "正在分析" : "等待分析") : "已暂存", tone: "processing" });
 }
 
 function renderReadyEntry(entry) {
@@ -335,6 +420,7 @@ function renderReviewEntry(entry) {
     actions.className = "review-actions";
     const retry = button("重新分析", "button button-secondary", "retry-analysis");
     retry.dataset.entryId = entry.id;
+    retry.disabled = !state.aiAvailable;
     const discard = button("丢弃", "button button-secondary review-discard", "discard-entry");
     discard.dataset.entryId = entry.id;
     actions.append(retry, discard);

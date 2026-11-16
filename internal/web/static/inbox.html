@@ -10,28 +10,32 @@
   <link rel="stylesheet" href="/assets/app.css?v=zh-1">
   <link rel="stylesheet" href="/assets/inbox.css?v=zh-1">
   <script src="/assets/zh.js?v=purchase-2" defer></script><script src="/assets/inbox.js?v=zh-1" defer></script>
+  <link rel="stylesheet" href="/assets/workspace.css">
 </head>
-<body>
+<body class="workspace workspace--ai">
   <a class="skip-link" href="#inbox-work">跳到收件箱</a>
 
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="物簿首页">
-      <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
-      <span><strong>物簿</strong><small>库存收件箱 · 仅库存，不记费用</small></span>
-    </a>
-    <div class="topbar-actions">
-      <a class="button button-secondary" href="/">
-        账簿首页
+  <header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">AI 辅助</span>
       </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai is-active" aria-current="page">AI 辅助</a>
+      </nav>
     </div>
   </header>
 
-  <main class="inbox-shell" id="inbox-work">
+  <main class="workspace-main inbox-shell" id="inbox-work">
     <section class="inbox-hero" aria-labelledby="inbox-title">
       <div>
-        <p class="eyebrow">AI 收件箱</p>
-        <h1 id="inbox-title">让 AI 整理，由你确认。</h1>
-        <p>新录入的内容在这里分析；准备好的库存变更会暂存，等你确认后应用。</p>
+
+        <h1 id="inbox-title">AI 辅助</h1>
+        <p>上传素材并审核分析建议。确认后才会写入库存。</p>
         <p class="inbox-focus" id="inbox-focus" hidden></p>
       </div>
       <aside class="inbox-settings" aria-labelledby="inbox-settings-title">
@@ -66,7 +70,7 @@
         <div class="inbox-capture-files" id="inbox-capture-files" aria-live="polite"></div>
         <div class="inbox-capture-footer">
           <p id="inbox-capture-status" role="status">原文件保存在本地，应用或丢弃后删除。</p>
-          <button class="button button-primary" id="inbox-capture-submit" type="submit">
+          <button class="button button-secondary" id="inbox-voice" type="button" aria-pressed="false">录制语音</button><button class="button button-primary" id="inbox-capture-submit" type="submit">
             添加并分析
           </button>
         </div>
@@ -102,6 +106,9 @@
       <div class="inbox-card-list" id="review-list"></div>
       <p class="inbox-empty" id="review-empty">暂无需要审核的内容。</p>
     </section>
+  <details id="analysis-history" class="inbox-section">
+      <summary>已处理记录</summary><div id="analysis-history-list" aria-live="polite"></div>
+    </details>
   </main>
 
   <footer class="footer">

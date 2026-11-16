@@ -42,10 +42,22 @@ vm.runInContext(`
   legacyMap.set(normalize(newRecord.name), newRecord);
   if (existingItem(legacyMap, CATALOG[0]) !== newRecord) throw new Error('Chinese inventory matching broken');
 `, context);
-for (const name of ['index.html', 'inbox.html', 'quicklist.html', 'ledger.html']) {
+const scripts = {
+  'index.html':'app', 'inbox.html':'inbox', 'quicklist.html':'quicklist',
+  'items.html':'items-workspace', 'finance.html':'finance-workspace'
+};
+for (const [name,script] of Object.entries(scripts)) {
   const html = read(name);
   assert.match(html, /lang="zh-CN"/);
-  assert.ok(html.indexOf('/assets/zh.js') < html.indexOf(`/assets/${{ 'index.html':'app', 'inbox.html':'inbox', 'quicklist.html':'quicklist', 'ledger.html':'ledger' }[name]}.js`));
+  assert.ok(html.indexOf('/assets/zh.js') >= 0 && html.indexOf('/assets/zh.js') < html.indexOf(`/assets/${script}.js`));
   assert.doesNotMatch(html, /material-symbols[^>]*>[\u3400-\u9fff]/, 'Icon identifiers must stay unchanged');
 }
+for (const name of ['home.html', 'items.html', 'finance.html', 'inbox.html', 'index.html', 'quicklist.html', 'weekly.html', 'financial.html']) {
+  const html = read(name);
+  assert.match(html, /lang="zh-CN"/);
+  for(const route of ['/items','/finance','/ai']) assert.ok(html.includes('href="'+route+'"'), name + ' missing ' + route);
+  assert.doesNotMatch(html, /\/assets\/(ledger|cashflow|runway|living)\.js/);
+}
+assert.doesNotMatch(read('assets/app.js'), /\/api\/v1\/intake/);
+assert.doesNotMatch(read('assets/finance-workspace.js'), /api\(\s*['"`]\/(items|inventory|durables|acquisitions|ledger\/summary)/);
 console.log('Frontend localization and legacy data compatibility checks passed.');

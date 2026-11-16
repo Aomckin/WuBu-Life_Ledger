@@ -9,71 +9,48 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/app.css?v=zh-1">
   <script src="/assets/zh.js?v=v011-1" defer></script><script src="/assets/app.js?v=v011-1" defer></script>
+  <link rel="stylesheet" href="/assets/workspace.css">
 </head>
-<body>
+<body class="workspace workspace--items">
   <a class="skip-link" href="#inventory">跳到库存列表</a>
 
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="物簿首页">
-      <span class="brand-mark material-symbols" aria-hidden="true">inventory_2</span>
-      <span>
-        <strong>物簿</strong>
-        <small>库存编辑 · 返回账簿首页</small>
-      </span>
-    </a>
-    <div class="topbar-actions">
+  <header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">物品本体</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items is-active" aria-current="page">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
+    </div>
+  </header>
+<div class="inventory-toolbar workspace-main">
       <span class="connection-pill" id="connection-pill" aria-live="polite">
         <span class="connection-dot"></span>
         <span id="connection-label">正在连接</span>
       </span>
-      <a class="button button-secondary button-ai" id="open-intake" href="/inbox">
-        <span class="material-symbols" aria-hidden="true">photo_camera</span>
-        库存收件箱
-        <span class="intake-count" id="intake-count" hidden>0</span>
-      </a>
+
       <button class="button button-primary" id="add-item" type="button">
         <span class="material-symbols" aria-hidden="true">add</span>
         添加物品
       </button>
     </div>
-  </header>
 
-  <main class="page-shell">
+  <main class="workspace-main page-shell">
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">家中物品，心中有数</p>
-        <h1 id="page-title">家里有什么，一目了然。</h1>
-        <p class="hero-copy">轻松记录日常用品，让每一份库存都有数。</p>
+
+        <h1 id="page-title">库存编辑</h1>
+
       </div>
       <p class="shortcut-hint"><kbd>N</kbd> 添加物品 <span></span> <kbd>/</kbd> 搜索</p>
     </section>
 
-    <section class="quick-command ai-capture" aria-labelledby="quick-command-title">
-      <span class="quick-command-icon material-symbols" aria-hidden="true">photo_camera</span>
-      <div class="quick-command-copy">
-        <strong id="quick-command-title">录入 AI 收件箱</strong>
-        <span id="quick-command-status" aria-live="polite">输入文字、录制语音，或上传最多 10 个文件。</span>
-        <a class="quick-command-batch" id="quick-command-batch" href="/inbox" hidden>查看本批次 <span class="quick-command-batch-arrow" aria-hidden="true">→</span></a>
-      </div>
-      <form class="quick-command-form" id="quick-command-form">
-        <input class="sr-only" id="quick-command-files" type="file" accept="image/*,audio/*,video/*,application/pdf" multiple>
-        <label class="quick-command-drop" id="quick-command-drop" for="quick-command-files">
-          <span class="quick-command-upload-symbol" aria-hidden="true">+</span>
-          <span><strong>拖入或选择文件</strong><small>图片、PDF、音频或视频 · 最多 10 个文件 / 共 250 MB</small></span>
-        </label>
-        <label class="sr-only" for="quick-command-input">本批次的补充说明（选填）</label>
-        <textarea id="quick-command-input" maxlength="100000" rows="3" placeholder="补充说明（选填），例如本周采购、包装规格或库存变化"></textarea>
-        <div class="quick-command-actions">
-        <button class="voice-button" id="voice-button" type="button" aria-label="录制语音" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Zm-1.8-9.5a1.8 1.8 0 1 1 3.6 0v6a1.8 1.8 0 1 1-3.6 0V6Zm7.55 5.15a.85.85 0 0 0-1.7 0V12a4.05 4.05 0 0 1-8.1 0v-.85a.85.85 0 0 0-1.7 0V12a5.76 5.76 0 0 0 4.9 5.69v1.61H9.2a.85.85 0 1 0 0 1.7h5.6a.85.85 0 1 0 0-1.7h-1.95v-1.61a5.76 5.76 0 0 0 4.9-5.69v-.85Z"/></svg>
-        </button>
-        <button class="button button-primary quick-command-save" id="quick-command-save" type="submit">
-          添加并分析
-        </button>
-        </div>
-        <div class="quick-command-file-list" id="quick-command-file-list" aria-live="polite"></div>
-      </form>
-    </section>
+
 
     <section class="metrics" aria-label="库存概览">
       <button class="metric-card metric-tracked is-active" type="button" data-summary-filter="">
@@ -296,65 +273,7 @@
     </form>
   </dialog>
 
-  <dialog class="intake-dialog" id="intake-dialog" aria-labelledby="intake-title">
-    <form id="intake-form" novalidate>
-      <div class="dialog-header">
-        <div>
-          <p class="eyebrow">暂存待审核</p>
-          <h2 id="intake-title">AI 收件箱</h2>
-        </div>
-        <button class="icon-button" id="close-intake" type="button" aria-label="关闭 AI 收件箱">
-          <span class="material-symbols" aria-hidden="true">close</span>
-        </button>
-      </div>
 
-      <div class="dialog-body intake-body">
-        <div class="intake-notice">
-          <span class="material-symbols" aria-hidden="true">inventory</span>
-          <div><strong>先保存，再处理收件箱。</strong><span>可选择全部分析、全部添加或分析后添加；仅在确认添加时修改库存。</span></div>
-        </div>
-
-        <input class="sr-only" id="intake-files" type="file" accept="image/*,audio/*,video/*,application/pdf">
-        <label class="upload-zone" id="upload-zone" for="intake-files">
-          <span class="material-symbols" aria-hidden="true">upload_file</span>
-          <strong>选择一个文件，或拖到这里</strong>
-          <span>小票、图片、音频、PDF 或短视频 · 最大 100 MB</span>
-        </label>
-        <div class="upload-list" id="upload-list" aria-live="polite"></div>
-        <div class="form-alert" id="intake-alert" role="alert" hidden></div>
-
-        <label class="field intake-note">
-          <span>补充说明 <small>选填</small></span>
-          <textarea id="intake-text" maxlength="100000" rows="5" placeholder="商店、日期、包装规格或完整购物清单"></textarea>
-        </label>
-
-        <div class="clarification-note">
-          <span class="material-symbols" aria-hidden="true">note_stack</span>
-          <p><strong>原文件仅临时保存</strong><span>原文件在 24 小时后到期，或在完成审核时删除。分析结果需确认后应用。</span></p>
-        </div>
-
-        <section class="recent-intake" aria-labelledby="recent-intake-title">
-          <div><h3 id="recent-intake-title">收件箱结果</h3><span id="recent-intake-count">0 条待处理</span></div>
-          <div class="intake-bulk-actions" aria-label="收件箱批量操作">
-            <button class="button button-secondary" id="analyze-all-intake" type="button">全部分析</button>
-            <button class="button button-secondary" id="add-all-intake" type="button">全部添加</button>
-            <button class="button button-primary" id="analyze-add-all-intake" type="button">全部分析并添加</button>
-          </div>
-          <ul id="recent-intake-list"></ul>
-          <p id="recent-intake-empty">还没有待处理的内容。</p>
-        </section>
-      </div>
-
-      <div class="dialog-footer">
-        <span class="dialog-spacer"></span>
-        <button class="button button-secondary" id="cancel-intake" type="button">取消</button>
-        <button class="button button-primary" id="save-intake" type="submit">
-          <span class="button-label">保存到收件箱</span>
-          <span class="button-spinner" aria-hidden="true"></span>
-        </button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
     <form method="dialog">

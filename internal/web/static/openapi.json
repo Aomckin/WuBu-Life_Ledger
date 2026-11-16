@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Personal Items and Finance ledger with optional Links and AI Assistance. Independent write operations commit only their domain. CNY only. Bind to loopback by default."
   },
   "servers": [

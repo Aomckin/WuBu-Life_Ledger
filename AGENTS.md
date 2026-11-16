@@ -1,7 +1,8 @@
 # 物簿开发边界
 
-- 本仓库为物簿 Life Ledger，基于 Timo348/Stockroom，保留母体结构与许可证。v1.0 独立事实源是当前架构基准，见 docs/V1.0_ARCHITECTURE.md。本轮交互基准为 docs/物簿 v1.0.1 开发任务书.md。
+- 本仓库为物簿 Life Ledger，基于 Timo348/Stockroom，保留母体结构与许可证。v1.0 独立事实源是当前架构基准，见 docs/V1.0_ARCHITECTURE.md。本轮前端基准为 docs/物簿 v1.0.2 开发任务书.md。
 - Items 管理物品与库存，Finance 管理账户、流水及原始资金证据，Links 关联已存在的事实。各领域独立提交，AI 通过领域契约协助。
+- 页面入口分为 /items、/finance、/ai。工作区普通页面只加载本领域业务脚本和数据。跨域查询与关联由用户主动发起。
 - 原生账单沿用锁定版本的 double-entry-generator 和现有微信、支付宝、银行模板。付款方式映射须经明确确认，银行资金归属以账单和账户身份为准。
 - 相邻的朝汐 ZhaoXi 项目严格只读；不得修改源码、配置、Git、虚拟环境、缓存或数据，也不得在那里运行可能写文件的命令。
 - 朝汐适配代码放在本仓库 tools/wubu_tool。需要测试真实 SDK 时使用 `python -B`，从只读 src 导入，禁止生成朝汐 __pycache__。安装或激活到朝汐环境需要用户另行改变只读要求。

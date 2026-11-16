@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>物簿 · 金额账户</title><link rel="icon" href="/assets/favicon.svg"><link rel="stylesheet" href="/assets/app.css"><link rel="stylesheet" href="/assets/ledger.css"><link rel="stylesheet" href="/assets/workspace.css"><script src="/assets/zh.js" defer></script><script src="/assets/workspace-core.js" defer></script><script src="/assets/finance-workspace.js" defer></script></head>
+<body class="workspace workspace--finance">
+<header class="workspace-header">
+    <div class="workspace-header-inner">
+      <a href="/" class="workspace-brand" aria-label="物簿首页">
+        <span class="workspace-brand-mark" aria-hidden="true">物</span>
+        <span class="workspace-title">金额账户</span>
+      </a>
+      <nav class="workspace-switch" aria-label="工作区导航">
+        <a href="/" class="workspace-switch-link">物簿</a>
+        <a href="/items" class="workspace-switch-link workspace-switch-link--items">物品本体</a>
+        <a href="/finance" class="workspace-switch-link workspace-switch-link--finance is-active" aria-current="page">金额账户</a>
+        <a href="/ai" class="workspace-switch-link workspace-switch-link--ai">AI 辅助</a>
+      </nav>
+    </div>
+  </header>
+<main class="page-shell workspace-main"><header class="workspace-hero workspace-workbench"><div><h1 class="workspace-hero-title">金额账户</h1><div class="ledger-actions"><button class="button button-primary" data-cash-action="expense">记支出</button><button class="button" data-cash-action="income">记收入</button></div></div><label class="workspace-period">月份 <input type="month" id="month"></label></header>
+<div id="message" role="status" aria-live="polite"></div><nav class="ledger-nav" aria-label="金额账户"><button type="button" data-view="home" class="button is-active">资金总览</button><button type="button" data-view="accounts" class="button">账户</button><button type="button" data-view="transactions" class="button">资金流水</button><button type="button" data-view="living" class="button">生活资金</button><a class="button" href="/weekly-sync">每周同步</a><a class="button" href="/financial-inbox">财务收件箱</a></nav>
+<section id="content" aria-live="polite"></section><div id="paging" hidden><button id="previous" class="button">上一页</button><span id="page-label"></span><button id="next" class="button">下一页</button></div></main>
+<dialog id="detail-dialog"><div class="dialog-head"><h2 id="detail-title"></h2><button type="button" data-close="detail-dialog" aria-label="关闭">×</button></div><div id="detail-content"></div></dialog>
+<dialog id="cash-dialog"><form id="cash-form"><div class="dialog-head"><h2 id="cash-title"></h2><button type="button" data-close="cash-dialog" aria-label="关闭">×</button></div><div id="cash-fields" class="form-grid"></div><div class="dialog-actions"><button class="button button-primary" type="submit">确认记录</button></div><p id="cash-error" class="form-error" role="alert"></p></form></dialog>
+</body></html>

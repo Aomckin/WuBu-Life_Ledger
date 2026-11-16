@@ -10,7 +10,7 @@ $previous = @{}
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $verificationProcess = $null
 try {
-    & $GoCommand build -trimpath -ldflags '-s -w -X main.version=1.0.1' -o $binary ./cmd/stockroom
+    & $GoCommand build -trimpath -ldflags '-s -w' -o $binary ./cmd/stockroom
     if ($LASTEXITCODE -ne 0) { throw 'Integration build failed' }
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()

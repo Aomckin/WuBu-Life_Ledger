@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"io"
 	"mime"
 	"net/http"
 	"stockroom/internal/ledger"
@@ -11,16 +10,6 @@ import (
 )
 
 func (a *API) registerStatements(m *http.ServeMux) {
-	m.HandleFunc("GET /weekly-sync", func(w http.ResponseWriter, r *http.Request) {
-		f, e := a.staticFS.Open("weekly.html")
-		if e != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer f.Close()
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.Copy(w, f)
-	})
 	m.HandleFunc("GET /api/v1/statements/templates", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"items": statement.Templates, "parser_version": statement.Version})
 	})

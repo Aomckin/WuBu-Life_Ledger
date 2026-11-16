@@ -172,7 +172,7 @@ func TestIntakeAPILifecycle(t *testing.T) {
 
 func TestStaticAppAndHealth(t *testing.T) {
 	handler := testHandler(t)
-	for _, path := range []string{"/", "/inbox", "/kiquicklist", "/healthz", "/api/v1/openapi.json", "/assets/app.js", "/assets/inbox.js", "/assets/inbox.css", "/assets/quicklist.js"} {
+	for _, path := range []string{"/", "/items", "/finance", "/ai", "/inbox", "/inventory", "/weekly-sync", "/financial-inbox", "/kiquicklist", "/healthz", "/api/v1/openapi.json", "/assets/app.js", "/assets/inbox.js", "/assets/inbox.css", "/assets/quicklist.js"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)

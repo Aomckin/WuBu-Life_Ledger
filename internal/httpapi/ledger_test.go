@@ -74,7 +74,7 @@ func TestLedgerHTTPAcceptance(t *testing.T) {
 	if d.MonthExpense != 0 || len(d.RecentPurchases) != 1 || len(d.RecentMaintenance) != 1 {
 		t.Fatal(d)
 	}
-	for _, path := range []string{"/api/v1/inventory", base + "/prices", base + "/acquisitions", base + "/inventory-events", base + "/aliases", "/api/v1/inventory-events", "/api/v1/maintenance", durable + "/maintenance", durable + "/durable", "/api/v1/acquisitions/" + p.ID, "/api/v1/expenses?category=food&from=2026-10-01T00:00:00%2B08:00&to=2026-11-01T00:00:00%2B08:00", "/inventory", "/assets/ledger.js", "/assets/ledger.css"} {
+	for _, path := range []string{"/api/v1/inventory", base + "/prices", base + "/acquisitions", base + "/inventory-events", base + "/aliases", "/api/v1/inventory-events", "/api/v1/maintenance", durable + "/maintenance", durable + "/durable", "/api/v1/acquisitions/" + p.ID, "/api/v1/expenses?category=food&from=2026-10-01T00:00:00%2B08:00&to=2026-11-01T00:00:00%2B08:00", "/inventory", "/items", "/assets/items-workspace.js", "/assets/ledger.css"} {
 		keyedRequest(t, h, "GET", path, "", "", 200)
 	}
 	keyedRequest(t, h, "GET", "/api/v1/acquisitions?limit=0", "", "", 422)
