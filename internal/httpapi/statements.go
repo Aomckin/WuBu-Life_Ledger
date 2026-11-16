@@ -24,6 +24,27 @@ func (a *API) registerStatements(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/statements/templates", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"items": statement.Templates, "parser_version": statement.Version})
 	})
+	m.HandleFunc("POST /api/v1/statements/detect", func(w http.ResponseWriter, r *http.Request) {
+		var p ledger.StatementInput
+		if err := decodeJSONLimit(w, r, &p, 7<<20); err != nil {
+			a.badJSON(w, r, err)
+			return
+		}
+		code, err := statement.DetectPayment(p.Filename, p.File)
+		if err != nil {
+			a.ledgerError(w, r, err)
+			return
+		}
+		writeJSON(w, 200, map[string]string{"provider_code": code})
+	})
+	m.HandleFunc("GET /api/v1/statements/{provider}/payment-accounts", func(w http.ResponseWriter, r *http.Request) {
+		items, err := a.store.StatementPaymentAccounts(r.Context(), r.PathValue("provider"))
+		if err != nil {
+			a.ledgerError(w, r, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"payment_accounts": items})
+	})
 	for _, action := range []string{"preview", "commit"} {
 		m.HandleFunc("POST /api/v1/statements/{provider}/"+action, func(w http.ResponseWriter, r *http.Request) {
 			var p ledger.StatementInput

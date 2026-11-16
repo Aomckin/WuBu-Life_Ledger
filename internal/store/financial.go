@@ -80,6 +80,9 @@ func normalizeFinancial(p ledger.RawFinancialInput) (ledger.RawFinancialInput, e
 	if p.Amount != nil && (*p.Amount <= 0 || *p.Amount > 1e12) {
 		return p, ledger.ErrInvalid
 	}
+	if d := p.ManualDetails; d != nil && (p.CaptureSource != "MANUAL" || len(p.RawText) > 8000 || len([]rune(p.RawText)) > 2000 || len(d.Category) > 100 || !validNature(d.ExpenseNature) || !validFinancialTags(d.Tags)) {
+		return p, ledger.ErrInvalid
+	}
 	if p.Direction != "" && p.Direction != "EXPENSE" && p.Direction != "INCOME" && p.Direction != "REFUND" {
 		return p, ledger.ErrInvalid
 	}
@@ -160,9 +163,12 @@ func captureFinancialTx(ctx context.Context, tx *sql.Tx, p ledger.RawFinancialIn
 	if p.ExternalID != "" {
 		rows, e := tx.QueryContext(ctx, `SELECT DISTINCT m.id FROM money_transactions m
  JOIN financial_event_links l ON l.transaction_id=m.id JOIN raw_financial_events r ON r.id=l.raw_event_id
- WHERE m.account_id=? AND m.voided_at='' AND m.amount_cents=? AND m.type=?
+ WHERE (COALESCE(NULLIF(json_extract(r.payload,'$.account_id'),''),m.account_id)=?
+   OR (m.account_id=? AND EXISTS (SELECT 1 FROM financial_corrections WHERE transaction_id=m.id))) AND m.voided_at=''
+ AND COALESCE(CAST(ROUND(json_extract(r.payload,'$.amount')*100) AS INTEGER),m.amount_cents)=?
+ AND COALESCE(NULLIF(json_extract(r.payload,'$.direction'),''),m.type)=?
  AND json_extract(r.payload,'$.provider')=? AND COALESCE(json_extract(r.payload,'$.provider_code'),'') IN (?, '')
- AND json_extract(r.payload,'$.external_id')=?`, a.ID, *p.Amount, p.Direction, p.Provider, p.ProviderCode, p.ExternalID)
+ AND json_extract(r.payload,'$.external_id')=?`, a.ID, a.ID, *p.Amount, p.Direction, p.Provider, p.ProviderCode, p.ExternalID)
 		if e != nil {
 			return r, e
 		}
@@ -270,7 +276,10 @@ func commitFinancialTx(ctx context.Context, tx *sql.Tx, r ledger.RawFinancialEve
 	}
 	var rule ledger.MerchantRule
 	var rulePayload string
-	ruleErr := tx.QueryRowContext(ctx, `SELECT payload FROM merchant_rules WHERE merchant_raw=?`, merchant).Scan(&rulePayload)
+	ruleErr := sql.ErrNoRows
+	if r.ManualDetails == nil {
+		ruleErr = tx.QueryRowContext(ctx, `SELECT payload FROM merchant_rules WHERE merchant_raw=?`, merchant).Scan(&rulePayload)
+	}
 	if ruleErr == nil {
 		if e := json.Unmarshal([]byte(rulePayload), &rule); e != nil {
 			return r, e
@@ -282,6 +291,10 @@ func commitFinancialTx(ctx context.Context, tx *sql.Tx, r ledger.RawFinancialEve
 		return r, ruleErr
 	}
 	input := ledger.MoneyInput{AccountID: account, Amount: *r.Amount, Merchant: merchant, OccurredAt: r.OccurredAt, Source: "import", RelatedTransactionID: r.RelatedTransactionID}
+	if d := r.ManualDetails; d != nil {
+		input.Source, input.Note = "manual", r.RawText
+		input.Category, input.ExpenseNature, input.Tags = d.Category, d.ExpenseNature, d.Tags
+	}
 	if r.Direction == "REFUND" {
 		original, e := refundOriginal(ctx, tx, input)
 		if e != nil {
@@ -351,6 +364,12 @@ func (s FinanceRepository) ReviewFinancial(ctx context.Context, key, id string, 
 		if out.Currency != "" && out.Currency != "CNY" && p.Action != "IGNORE" && p.Amount == nil {
 			return fmt.Errorf("%w: 外币证据需显式提供人民币金额", ledger.ErrInvalid)
 		}
+		if len([]rune(p.Note)) > 2000 {
+			return ledger.ErrInvalid
+		}
+		if strings.TrimSpace(p.Reason) == "" {
+			p.Reason = map[string]string{"MATCH": "CONFIRMED_EXISTING_TRANSACTION", "CREATE_NEW": "CONFIRMED_INDEPENDENT_TRANSACTION", "IGNORE": "CONFIRMED_IGNORE"}[p.Action]
+		}
 		review, e := json.Marshal(p)
 		if e != nil {
 			return e
@@ -382,9 +401,6 @@ func (s FinanceRepository) ReviewFinancial(ctx context.Context, key, id string, 
 		}
 		switch p.Action {
 		case "IGNORE":
-			if strings.TrimSpace(p.Reason) == "" {
-				return ledger.ErrInvalid
-			}
 			out.Status = "IGNORED"
 			out.Decision = p.Reason
 			return saveRawTx(ctx, tx, out)
@@ -415,7 +431,15 @@ func (s FinanceRepository) ReviewFinancial(ctx context.Context, key, id string, 
 			if out.Direction == "REFUND" && out.RelatedTransactionID == "" {
 				return fmt.Errorf("%w: 请先选择退款对应的原支出", ledger.ErrInvalid)
 			}
-			out, e = commitFinancialTx(ctx, tx, out, p.AccountID, p.Merchant)
+			account := p.AccountID
+			if account == "" {
+				account = out.AccountID
+			}
+			merchant := p.Merchant
+			if merchant == "" {
+				merchant = out.MerchantRaw
+			}
+			out, e = commitFinancialTx(ctx, tx, out, account, merchant)
 			return e
 		default:
 			return ledger.ErrInvalid
@@ -431,7 +455,10 @@ func (s FinanceRepository) RawFinancialEvents(ctx context.Context, status string
 	if f.Limit < 1 || f.Limit > 500 || f.Offset < 0 {
 		return nil, ledger.ErrInvalid
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id FROM raw_financial_events WHERE (?='' OR status=?) AND (?='' OR json_extract(payload,'$.provider')=?) AND (?='' OR json_extract(payload,'$.capture_source')=?) AND (?='' OR json_extract(payload,'$.merchant_raw')=?) ORDER BY rowid DESC LIMIT ? OFFSET ?`, status, status, f.Provider, f.Provider, f.CaptureSource, f.CaptureSource, f.Merchant, f.Merchant, f.Limit, f.Offset)
+	rows, e := s.db.QueryContext(ctx, `SELECT id FROM raw_financial_events
+		WHERE (?='' OR status=? OR (?='PENDING' AND status NOT IN ('COMMITTED','IGNORED')) OR (?='PROCESSED' AND status IN ('COMMITTED','IGNORED')))
+		AND (?='' OR json_extract(payload,'$.provider')=?) AND (?='' OR json_extract(payload,'$.capture_source')=?) AND (?='' OR json_extract(payload,'$.merchant_raw')=?)
+		ORDER BY rowid DESC LIMIT ? OFFSET ?`, status, status, status, status, f.Provider, f.Provider, f.CaptureSource, f.CaptureSource, f.Merchant, f.Merchant, f.Limit, f.Offset)
 	if e != nil {
 		return nil, e
 	}
@@ -539,7 +566,35 @@ func (s FinanceRepository) FinancialTransactions(ctx context.Context, at string,
 	if f.Limit < 1 || f.Limit > 500 || f.Offset < 0 {
 		return nil, ledger.ErrInvalid
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions WHERE voided_at='' AND type IN ('EXPENSE','INCOME','REFUND') AND (?='' OR ABS(julianday(occurred_at)-julianday(?))*1440<=?) AND (?='' OR julianday(occurred_at)>=julianday(?)) AND (?='' OR julianday(occurred_at)<julianday(?)) AND (?='' OR merchant=?) AND (?='' OR account_id=?) AND (? IS NULL OR amount_cents=?) AND (?='' OR COALESCE((SELECT json_extract(payload,'$.annotation_status') FROM transaction_annotations WHERE transaction_id=money_transactions.id),'UNANNOTATED')=?) AND (?=0 OR id NOT IN (SELECT transaction_id FROM transaction_annotations WHERE json_extract(payload,'$.annotation_status')!='UNANNOTATED')) ORDER BY occurred_at DESC LIMIT ? OFFSET ?`, at, at, window, f.From, f.From, f.To, f.To, f.Merchant, f.Merchant, f.AccountID, f.AccountID, f.Amount, f.Amount, f.AnnotationStatus, f.AnnotationStatus, unannotated, f.Limit, f.Offset)
+	if len([]rune(f.Search)) > 200 || f.RefundAmount < 0 {
+		return nil, ledger.ErrInvalid
+	}
+	if f.RefundAt != "" {
+		var err error
+		f.RefundAt, err = ledger.Timestamp(f.RefundAt)
+		if err != nil {
+			return nil, err
+		}
+	}
+	rows, e := s.db.QueryContext(ctx, `SELECT `+transactionColumns+` FROM money_transactions AS m
+		WHERE voided_at='' AND type IN ('EXPENSE','INCOME','REFUND')
+		AND (?='' OR id=?) AND (?='' OR type=?)
+		AND (?='' OR ABS(julianday(occurred_at)-julianday(?))*1440<=?)
+		AND (?='' OR julianday(occurred_at)>=julianday(?)) AND (?='' OR julianday(occurred_at)<julianday(?))
+		AND (?='' OR merchant=?) AND (?='' OR account_id=?) AND (? IS NULL OR amount_cents=?)
+		AND (?='' OR instr(lower(merchant||' '||note),lower(?))>0
+			OR EXISTS(SELECT 1 FROM transaction_annotations a WHERE a.transaction_id=m.id
+				AND instr(lower(COALESCE(json_extract(a.payload,'$.item_description'),json_extract(a.payload,'$.item_name'),'')),lower(?))>0)
+			OR EXISTS(SELECT 1 FROM financial_event_links l JOIN raw_financial_events r ON r.id=l.raw_event_id
+				WHERE l.transaction_id=m.id AND instr(lower(json_extract(r.payload,'$.description_raw')),lower(?))>0))
+		AND (?='' OR julianday(occurred_at)<=julianday(?))
+		AND (?=0 OR (type='EXPENSE' AND reason NOT IN ('DEPOSIT_LOSS','RECEIVABLE_LOSS')
+			AND amount_cents-COALESCE((SELECT SUM(r.amount_cents) FROM money_transactions r WHERE r.type='REFUND' AND r.voided_at='' AND r.related_transaction_id=m.id AND r.id!=?),0)>=?))
+		AND (?='' OR COALESCE((SELECT json_extract(payload,'$.annotation_status') FROM transaction_annotations WHERE transaction_id=m.id),'UNANNOTATED')=?)
+		AND (?=0 OR id NOT IN (SELECT transaction_id FROM transaction_annotations WHERE json_extract(payload,'$.annotation_status')!='UNANNOTATED'))
+		ORDER BY occurred_at DESC,id LIMIT ? OFFSET ?`, f.TransactionID, f.TransactionID, f.Type, f.Type,
+		at, at, window, f.From, f.From, f.To, f.To, f.Merchant, f.Merchant, f.AccountID, f.AccountID, f.Amount, f.Amount,
+		f.Search, f.Search, f.Search, f.Search, f.RefundAt, f.RefundAt, f.RefundAmount, f.EditingRefund, f.RefundAmount, f.AnnotationStatus, f.AnnotationStatus, unannotated, f.Limit, f.Offset)
 	if e != nil {
 		return nil, e
 	}

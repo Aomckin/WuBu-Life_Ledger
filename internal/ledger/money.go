@@ -85,6 +85,7 @@ type MoneyInput struct {
 	Source               string       `json:"source,omitempty"`
 	Note                 string       `json:"note,omitempty"`
 	Reason               string       `json:"reason,omitempty"`
+	Tags                 []string     `json:"tags,omitempty"`
 }
 type MoneyTransaction struct {
 	RefundableAmount     *Money      `json:"refundable_amount,omitempty"`

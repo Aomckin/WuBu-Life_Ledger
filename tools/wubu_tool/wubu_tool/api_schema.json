@@ -234,7 +234,7 @@
         "unit": {
           "type": "string",
           "maxLength": 20,
-          "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
+          "description": "库存计量单位，例如瓶或个。省略时沿用唯一匹配物品的单位，新物品默认 pcs。"
         },
         "item_type": {
           "enum": [
@@ -288,8 +288,7 @@
       },
       "required": [
         "name",
-        "quantity",
-        "unit"
+        "quantity"
       ],
       "additionalProperties": false
     },
@@ -570,6 +569,10 @@
         },
         "raw_payload": {
           "type": "string"
+        },
+        "manual_details": {
+          "$ref": "#/$defs/ManualFinancialDetails",
+          "description": "Optional details for a MANUAL financial memo; retained when the account is confirmed."
         }
       },
       "required": [
@@ -577,6 +580,27 @@
         "capture_source",
         "raw_text"
       ]
+    },
+    "ManualFinancialDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "expense_nature": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      }
     },
     "FinancialReview": {
       "type": "object",
@@ -614,12 +638,16 @@
           "type": "string"
         },
         "reason": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional audit reason. Defaults to a reason derived from the selected action."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
         }
       },
       "required": [
-        "action",
-        "reason"
+        "action"
       ]
     },
     "NamedDiscardInput": {
@@ -1321,6 +1349,14 @@
             "CAPITAL",
             "EXCEPTIONAL"
           ]
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          }
         }
       },
       "required": [
@@ -1369,6 +1405,14 @@
         "note": {
           "type": "string",
           "maxLength": 2000
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          }
         }
       },
       "required": [

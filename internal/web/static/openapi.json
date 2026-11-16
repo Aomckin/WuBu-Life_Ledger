@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "物簿 Life Ledger API",
-    "version": "1.0.0-rc.2",
+    "version": "1.0.1",
     "description": "Personal Items and Finance ledger with optional Links and AI Assistance. Independent write operations commit only their domain. CNY only. Bind to loopback by default."
   },
   "servers": [
@@ -6838,7 +6838,34 @@
         "summary": "get_unannotated_transactions",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AnnotatedTransaction"
+                      }
+                    },
+                    "match_status": {
+                      "type": "string",
+                      "enum": [
+                        "NO_MATCH",
+                        "CANDIDATE_FOUND",
+                        "REVIEW_NEEDED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -6928,6 +6955,58 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "EXPENSE",
+                "INCOME",
+                "REFUND"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "transaction_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refund_at",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "refund_amount",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 10000000000,
+              "multipleOf": 0.01
+            }
+          },
+          {
+            "name": "editing_refund",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "description": "When occurred_at is provided, match_status is NO_MATCH, CANDIDATE_FOUND or REVIEW_NEEDED. Ambiguity is evaluated independently of requested pagination. A single candidate is not automatic authorization to annotate or create money."
@@ -6993,7 +7072,30 @@
             "description": "OK"
           }
         },
-        "parameters": []
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "An exact evidence status, PENDING or PROCESSED"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
       },
       "post": {
         "operationId": "capture_financial_event",
@@ -8426,6 +8528,307 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/financial/transactions/{id}/details": {
+      "patch": {
+        "operationId": "edit_transaction_details",
+        "summary": "Change supplied transaction details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotatedTransaction"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrent update, invalid association or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionDetailsPatch"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/financial/transactions/{id}/correction": {
+      "post": {
+        "operationId": "correct_transaction_funding",
+        "summary": "Apply an audited funding correction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyTransaction"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrent update, invalid association or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FundingCorrection"
+              }
+            }
+          }
+        },
+        "description": "Requires the expected funding version. Validates existing refunds and applies all balance and checkpoint compensation in one transaction. Original evidence, import batches and transaction references are preserved."
+      }
+    },
+    "/api/v1/financial/events/{id}/candidates": {
+      "get": {
+        "operationId": "get_financial_event_candidates",
+        "summary": "List existing candidates for a pending financial event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MoneyTransaction"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/detect": {
+      "post": {
+        "operationId": "detect_statement_provider",
+        "summary": "Recognize native payment statement headers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "provider_code": {
+                      "type": "string",
+                      "enum": [
+                        "",
+                        "wechat",
+                        "alipay"
+                      ],
+                      "description": "Empty when a bank template must be selected."
+                    }
+                  },
+                  "required": [
+                    "provider_code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "filename": {
+                    "type": "string"
+                  },
+                  "file_base64": {
+                    "type": "string",
+                    "format": "byte"
+                  }
+                },
+                "required": [
+                  "filename",
+                  "file_base64"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/statements/{provider}/payment-accounts": {
+      "get": {
+        "operationId": "get_statement_payment_accounts",
+        "summary": "Read confirmed mappings for the payment platform",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "payment_accounts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "payment_accounts"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -11114,6 +11517,14 @@
           "note": {
             "type": "string",
             "maxLength": 2000
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
           }
         },
         "required": [
@@ -11177,6 +11588,14 @@
               "CAPITAL",
               "EXCEPTIONAL"
             ]
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
           }
         },
         "required": [
@@ -12639,6 +13058,10 @@
           },
           "raw_payload": {
             "type": "string"
+          },
+          "manual_details": {
+            "$ref": "#/components/schemas/ManualFinancialDetails",
+            "description": "Optional details for a MANUAL financial memo; retained when the account is confirmed."
           }
         },
         "required": [
@@ -12683,12 +13106,16 @@
             "type": "string"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional audit reason. Defaults to a reason derived from the selected action."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
           }
         },
         "required": [
-          "action",
-          "reason"
+          "action"
         ]
       },
       "TransactionAnnotation": {
@@ -13170,7 +13597,7 @@
           "unit": {
             "type": "string",
             "maxLength": 20,
-            "description": "数量单位，常用：瓶、罐、升、毫升、个、包、盒、袋、箱、支、卷、片、克、千克、件、套、份；允许自定义。包装规格写入 name。例如 name=无糖可乐2L, quantity=1, unit=瓶。"
+            "description": "库存计量单位，例如瓶或个。省略时沿用唯一匹配物品的单位，新物品默认 pcs。"
           },
           "item_type": {
             "enum": [
@@ -13224,8 +13651,7 @@
         },
         "required": [
           "name",
-          "quantity",
-          "unit"
+          "quantity"
         ],
         "additionalProperties": false
       },
@@ -13648,6 +14074,9 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1
+          },
+          "manual_details": {
+            "$ref": "#/components/schemas/ManualFinancialDetails"
           }
         },
         "required": [
@@ -13661,6 +14090,142 @@
           "candidates",
           "confidence"
         ]
+      },
+      "TransactionDetailsPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "item_description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        }
+      },
+      "FundingVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "EXPENSE",
+              "INCOME",
+              "REFUND"
+            ]
+          },
+          "related_transaction_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "amount",
+          "direction"
+        ]
+      },
+      "FundingCorrection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "$ref": "#/components/schemas/FundingVersion"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 10000000000,
+            "multipleOf": 0.01
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "EXPENSE",
+              "INCOME",
+              "REFUND"
+            ]
+          },
+          "related_transaction_id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "expected"
+        ]
+      },
+      "AnnotatedTransaction": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MoneyTransaction"
+          },
+          {
+            "type": "object",
+            "required": [
+              "annotation"
+            ],
+            "properties": {
+              "annotation": {
+                "$ref": "#/components/schemas/TransactionAnnotation"
+              }
+            }
+          }
+        ]
+      },
+      "ManualFinancialDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "expense_nature": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        }
       }
     }
   }

@@ -40,6 +40,10 @@ func (s ItemsRepository) recordPurchase(ctx context.Context, key, operation stri
 			return e
 		}
 		for i := range out.Items {
+			// With no explicit unit, follow the uniquely matched item's unit.
+			if strings.TrimSpace(input.Items[i].Unit) == "" {
+				out.Items[i].Unit = ""
+			}
 			if e = insertPurchaseLine(ctx, tx, &out, &out.Items[i], now); e != nil {
 				return e
 			}
@@ -251,6 +255,9 @@ func insertPurchaseLine(ctx context.Context, tx *sql.Tx, purchase *ledger.Purcha
 			e = ErrNotFound
 		}
 		if errors.Is(e, ErrNotFound) && l.ItemID == "" {
+			if l.Unit == "" {
+				l.Unit = "pcs"
+			}
 			item.ID = uuid.NewString()
 			qty := 0.0
 			_, e = tx.ExecContext(ctx, `INSERT INTO items(id,name,category,icon,quantity,unit,location,notes,created_at,updated_at,item_type,spec,package_size,package_unit) VALUES(?,?,?,'inventory_2',?,?,?,?,?,?,?,?,?,?)`, item.ID, l.Name, l.Category, qty, l.Unit, l.Location, l.Note, now, now, l.ItemType, l.Spec, l.PackageSize, l.PackageUnit)
@@ -262,7 +269,7 @@ func insertPurchaseLine(ctx context.Context, tx *sql.Tx, purchase *ledger.Purcha
 		if e != nil {
 			return e
 		}
-		if item.ItemType != l.ItemType || inventory.UnitKey(item.Unit) != inventory.UnitKey(l.Unit) {
+		if item.ItemType != l.ItemType || (l.Unit != "" && inventory.UnitKey(item.Unit) != inventory.UnitKey(l.Unit)) {
 			return fmt.Errorf("%w: item type or unit mismatch for %s", ledger.ErrConflict, l.Name)
 		}
 		l.ItemID = item.ID
@@ -299,6 +306,9 @@ func insertPurchaseLine(ctx context.Context, tx *sql.Tx, purchase *ledger.Purcha
 				return e
 			}
 		}
+	}
+	if l.Unit == "" {
+		l.Unit = "pcs"
 	}
 	var itemID any
 	if l.ItemID != "" {

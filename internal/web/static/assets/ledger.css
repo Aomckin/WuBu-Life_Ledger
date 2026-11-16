@@ -8,3 +8,10 @@
 /* Keep the two fund boundaries together, followed by spending and possessions. */
 .metrics{grid-template-columns:repeat(6,minmax(0,1fr))}.ledger-metric{grid-column:span 2}.ledger-metric:nth-child(-n+4){grid-column:span 3}
 @media(max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ledger-metric,.ledger-metric:nth-child(-n+4){grid-column:span 1}.ledger-metric:last-child{grid-column:span 2}}
+.ledger-nav details summary,.ledger-panel summary,.purchase-line-options summary,#purchase-options summary,#cash-fields summary{cursor:pointer;padding:8px 0}
+.ledger-more[open] .ledger-actions{margin:0 0 8px}
+.ledger-nav [aria-pressed=true]{background:var(--ink,#20342c);color:white}
+#purchase-lines .line{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}
+.purchase-line-options{grid-column:1/-1}
+#purchase-options{margin:12px 0}
+@media(max-width:560px){#purchase-lines .line{grid-template-columns:repeat(2,minmax(0,1fr))}#purchase-lines .line label:first-child{grid-column:1/-1}}

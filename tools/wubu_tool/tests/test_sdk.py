@@ -37,7 +37,8 @@ class SDKTests(unittest.TestCase):
         self.assertNotIn("record_purchase", tools)
         schema = tools["wubu"].schema()["function"]["parameters"]
         line = schema["$defs"]["AcquisitionLine"]
-        self.assertEqual(set(line["required"]), {"name", "quantity", "unit"})
+        self.assertEqual(set(line["required"]), {"name", "quantity"})
+        self.assertIn("unit", line["properties"])
         self.assertNotIn("unit_price", line["properties"])
         self.assertNotIn("account_id", schema["$defs"]["AcquisitionInput"]["properties"])
 

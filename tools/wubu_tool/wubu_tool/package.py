@@ -105,7 +105,7 @@ class WubuTool(Tool):
 
 class WubuToolPackage:
     package_id = "wubu-tool"
-    package_version = "1.0.0-rc.2"
+    package_version = "1.0.1"
     requires_sdk = ">=1,<2"
     def __init__(self): self.client = None
     def capability_declaration(self): return CapabilityDeclaration(tool=True, router_hints=True)

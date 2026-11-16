@@ -59,6 +59,37 @@ func TestFinancialEvidenceAndAnnotation(t *testing.T) {
 	countTable(t, s, "financial_event_links", 3)
 	countTable(t, s, "raw_financial_events", 3)
 }
+
+func TestManualMemoPreservesDetailsWhenAccountIsConfirmed(t *testing.T) {
+	s := ledgerDB(t)
+	ctx := context.Background()
+	a := moneyAccount(t, s, "wallet", "WALLET", 10000)
+	amount := ledger.Money(1600)
+	p := ledger.RawFinancialInput{Provider: "OTHER", CaptureSource: "MANUAL", OccurredAt: "2026-11-15T12:00:00Z",
+		Amount: &amount, Direction: "EXPENSE", MerchantRaw: "晚饭商家", RawText: "晚饭",
+		ManualDetails: &ledger.ManualFinancialDetails{Category: "餐饮", Tags: []string{"工作日"}}}
+	captured, _, err := s.CaptureFinancial(ctx, "memo", p)
+	if err != nil || captured.Status != "CAPTURED" || captured.TransactionID != "" {
+		t.Fatal(captured, err)
+	}
+	balanceIs(t, s, a.ID, 10000)
+	balanceIs(t, s, "unknown", 0)
+	review := ledger.FinancialReview{Action: "CREATE_NEW", AccountID: a.ID}
+	posted, replay, err := s.ReviewFinancial(ctx, "confirm", captured.ID, review)
+	if err != nil || replay || posted.Status != "COMMITTED" {
+		t.Fatal(posted, replay, err)
+	}
+	if _, replay, err = s.ReviewFinancial(ctx, "confirm", captured.ID, review); err != nil || !replay {
+		t.Fatal(replay, err)
+	}
+	balanceIs(t, s, a.ID, 8400)
+	items, err := s.FinancialTransactions(ctx, "", 30, false, ledger.FinancialQuery{
+		MoneyFilter: ledger.MoneyFilter{HistoryFilter: ledger.HistoryFilter{Limit: 1}}, TransactionID: posted.TransactionID})
+	if err != nil || len(items) != 1 || items[0].Note != p.RawText || items[0].Category != p.ManualDetails.Category ||
+		len(items[0].Annotation.Tags) != 1 || items[0].Annotation.Tags[0] != "工作日" {
+		t.Fatal(items, err)
+	}
+}
 func TestFinancialCheckpointLateRefund(t *testing.T) {
 	s := ledgerDB(t)
 	ctx := context.Background()

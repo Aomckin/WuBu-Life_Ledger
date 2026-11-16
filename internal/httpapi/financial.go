@@ -65,8 +65,22 @@ func (a *API) registerFinancial(m *http.ServeMux) {
 	m.HandleFunc("POST /api/v1/financial/events/{id}/review", writeFinancial(a, 200, func(r *http.Request, p ledger.FinancialReview) (any, bool, error) {
 		return a.store.ReviewFinancial(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
 	}))
+	m.HandleFunc("GET /api/v1/financial/events/{id}/candidates", func(w http.ResponseWriter, r *http.Request) {
+		items, err := a.store.FinancialCandidates(r.Context(), r.PathValue("id"))
+		if err != nil {
+			a.ledgerError(w, r, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": items})
+	})
 	m.HandleFunc("PUT /api/v1/financial/transactions/{id}/annotation", writeFinancial(a, 200, func(r *http.Request, p ledger.TransactionAnnotation) (any, bool, error) {
 		return a.store.AnnotateTransaction(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
+	}))
+	m.HandleFunc("PATCH /api/v1/financial/transactions/{id}/details", writeFinancial(a, 200, func(r *http.Request, p ledger.TransactionDetailsPatch) (any, bool, error) {
+		return a.store.EditTransactionDetails(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
+	}))
+	m.HandleFunc("POST /api/v1/financial/transactions/{id}/correction", writeFinancial(a, 200, func(r *http.Request, p ledger.FundingCorrection) (any, bool, error) {
+		return a.store.CorrectFunding(r.Context(), r.Header.Get("Idempotency-Key"), r.PathValue("id"), p)
 	}))
 	m.HandleFunc("GET /api/v1/financial/events", func(w http.ResponseWriter, r *http.Request) {
 		h, ok := a.historyFilter(w, r)
@@ -96,7 +110,14 @@ func (a *API) registerFinancial(m *http.ServeMux) {
 		if !ok {
 			return
 		}
-		filter := ledger.FinancialQuery{MoneyFilter: f, AnnotationStatus: q.Get("annotation_status")}
+		filter := ledger.FinancialQuery{MoneyFilter: f, AnnotationStatus: q.Get("annotation_status"), Search: q.Get("search"),
+			RefundAt: q.Get("refund_at"), EditingRefund: q.Get("editing_refund"), TransactionID: q.Get("transaction_id")}
+		if q.Get("refund_amount") != "" {
+			if e = json.Unmarshal([]byte(q.Get("refund_amount")), &filter.RefundAmount); e != nil || filter.RefundAmount <= 0 {
+				a.ledgerError(w, r, ledger.ErrInvalid)
+				return
+			}
+		}
 		if q.Get("amount") != "" {
 			var amount ledger.Money
 			if e = json.Unmarshal([]byte(q.Get("amount")), &amount); e != nil || amount <= 0 {

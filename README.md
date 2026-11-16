@@ -1,22 +1,30 @@
-# 物簿 Life Ledger v1.0 RC2
+# 物簿 Life Ledger v1.0.1
 
 东西有生命周期，钱有流向。基于 [Timo348/Stockroom](https://github.com/Timo348/Stockroom) 的 Go + SQLite 定向扩展，保留母体结构、库存、Intake、媒体、Docker 与 Apache-2.0 许可证。
 
 ## v1.0 Independent Domains
 
-购入、维护、售出和退货记录物品事实。支出、收入和退款记录实际发生的款项。可按 ID 关联已有记录，也可从已有支出后补入库。网页、REST 与朝汐 SDK 均使用独立领域接口。
+购入、维护、售出和退货记录物品事实。支出、收入和退款记录实际发生的款项。可搜索并选择已有资金流水建立关联，也可从已有支出后补入库。网页、REST 与朝汐 SDK 均使用独立领域接口。
 
-本地交付版本为 1.0.0-rc.2。详见 [v1.0 任务书](<docs/物簿 v1.0 开发任务书.md>)、[架构说明](docs/V1.0_ARCHITECTURE.md) 与 [迁移和验收记录](docs/V1.0_ACCEPTANCE.md)。
+独立事实源基线见 [v1.0 任务书](<docs/物簿 v1.0 开发任务书.md>)、[架构说明](docs/V1.0_ARCHITECTURE.md) 与 [迁移和验收记录](docs/V1.0_ACCEPTANCE.md)。
+
+## 日常记账与每周同步
+
+首页提供快捷收支、每周同步、待确认、账户余额和常用物品。快捷收支填写金额、说明、账户。账户未知时可暂存，确认账户后入账。普通购入可输入名称、数量与可选规格，例如“无糖可乐”与“2 瓶”。留空单位时沿用唯一匹配物品的单位，新物品默认按个计量。
+
+每周同步上传后自动识别微信 XLSX / CSV 和支付宝 CSV，恢复已确认的付款方式映射并预览。银行文件选择对应模板和账户。财务收件箱按问题提供账户、重复交易和退款候选。已入账流水可分别编辑说明和校正资金。校正记录前后值，并保留原始证据和余额检查点。
+
+详见 [v1.0.1 任务书](<docs/物簿 v1.0.1 开发任务书.md>)和 [本版验收](docs/V1.0.1_ACCEPTANCE.md)。
 
 ## v0.4 Weekly Reconciliation & Semantic Backfill
 
-每周同步入口 `/weekly-sync` 提供微信原生 XLSX / CSV、支付宝原生 CSV 两个专用上传入口，以及 14 个银行模板。实际复用固定版本 double-entry-generator v2.16.0 的 Provider / IR；预览后提交，保留原文件、逐行证据、批次与回执。资金收件箱 `/financial-inbox` 支持歧义审核、独立语义补全、余额检查点与迟到流水补偿、已有支出的购买后补。
+每周同步入口 `/weekly-sync` 支持微信原生 XLSX / CSV、支付宝原生 CSV 及 14 个银行模板。实际复用固定版本 double-entry-generator v2.16.0 的 Provider / IR；预览后提交，保留原文件、逐行证据、批次与回执。资金收件箱 `/financial-inbox` 支持歧义审核、独立语义补全、余额检查点与迟到流水补偿、已有支出的购买后补。
 
 v0.4 基线见 [v0.4 任务书](<docs/物簿 v0.4 开发任务书｜Weekly Reconciliation & Semantic Backfill.md>)；P0 / P1 实现、验收与 P2 后续范围见 [v0.4 交付记录](docs/V0.4_DELIVERY.md)、[审计](docs/WUBU_V04_AUDIT.md)、[原生导入记录](docs/V0.4_IMPORT_RESEARCH.md)。旧任务书已废止，手机采集子项目及接入已移除。
 
 ## v0.3 Living Runway
 
-首页现在展示未来已预留、安全可花与安全日均；可管理未来收支、固定周期和安全缓冲。生活约束页记录居住、押金与实际代垫；支出可区分日常 / 固定 / 安家 / 耐用品 / 特殊事件，库存支持历史消耗预测。
+首页“资金规划与补给”展示未来已预留、安全可花与安全日均；可管理未来收支、固定周期和安全缓冲。生活约束页记录居住、押金与实际代垫；支出可区分日常 / 固定 / 安家 / 耐用品 / 特殊事件，库存支持历史消耗预测。
 
 交付与计算口径见 [v0.3 交付记录](docs/V0.3_DELIVERY.md)，基线见 [v0.3 审计](docs/WUBU_V03_AUDIT.md)。本轮只在临时数据库验证，正式库及朝汐服务未迁移或重启。
 
@@ -30,7 +38,7 @@ Windows 双击 `启动物簿.cmd`，或运行：
 
 打开 http://127.0.0.1:8026 。Ctrl+C 停止，正式数据在 `data/wubu.db`。默认只监听本机，不需要 AI 配置。Go >=1.25；可使用本机不入 Git 的 `.tools/go`。Linux/macOS 可运行 `go run ./cmd/stockroom`；Docker 配置保留，本次没有容器验收。
 
-空数据库会初始化为 schema 16。已有 v0.4 数据通过 `scripts/migrate-v10.py` 从 schema 14 备份生成独立的 schema 16 文件，再安排切换。命令和回滚步骤见 [迁移和验收记录](docs/V1.0_ACCEPTANCE.md)。
+空数据库会初始化为 schema 17。已有 schema 16 数据库在 v1.0.1 启动时升级至 17。正式升级前先停服务并备份。已有 v0.4 数据通过 `scripts/migrate-v10.py` 从 schema 14 备份生成独立的 schema 16 文件，再安排切换。命令和回滚步骤见 [迁移和验收记录](docs/V1.0_ACCEPTANCE.md)。
 
 ## 已实现
 
@@ -40,8 +48,8 @@ Windows 双击 `启动物簿.cmd`，或运行：
 - 耐用品：独立仓库、品牌型号、序列号、购买信息、位置、保修和使用时长；在用、收纳、丢失、已售、退休，完整生命周期事件。出售后可单独登记到账收入并关联。退休保留历史。
 - 维护：维护独立记录，费用可选关联。历史成本继续可查。
 - 查询：上海时区今日、本周、本月、本年或自定义范围；分类、商家、商品和账户统计；商品购买次数、数量、最近价格和维护次数。
-- 导入：微信 / 支付宝原生专用入口和银行模板，支持逐行预览、事务提交、整文件重导提示、批次历史及原文件下载。无订单号的同秒同价多行也保留独立身份；歧义、外币、未确定的还款 / 划转进入审核。支付流水不自动生成商品库存。
-- 页面：首页分开显示自由可用资金 / 消费储值，账户按分类分组，支持充值、分类编辑和账户流水详情；保留资金流水、耐用品、导入，保留原库存、购买、消费、维护与历史页面。
+- 导入：微信 / 支付宝自动识别和银行模板，支持自动预览、事务提交、整文件重导提示、批次历史及原文件下载。无订单号的同秒同价多行也保留独立身份；歧义、外币、未确定的还款 / 划转进入审核。支付流水不自动生成商品库存。
+- 页面：首页展示日常记录入口、账户余额和常用物品。资金规划、耐用品和历史管理折叠在次级区域。
 - Agent：现实动作高层工具，全部关键写入支持持久化 Idempotency-Key；同键同参数重放，变更参数返回 409，失败不占键。
 
 金额 API 使用 CNY 元，最多两位小数，SQLite 存整数分。支出等 `amount` 为正的绝对值，`balance_delta` 表达方向。信用卡采用**净余额**，债务为负，转入还款增加余额，信用额度不计总资金。`liquid_balance` 是启用的存储账户资金，`consumption_balance` 是启用的消费储值，二者均排除信用卡和未指定账户。未指定账户保留无法确认账户的旧账，不猜支付钱包，也不计真实总余额。
@@ -50,13 +58,14 @@ Windows 双击 `启动物簿.cmd`，或运行：
 
 - 契约：`GET /api/v1/openapi.json`
 - 账户：`GET / POST /api/v1/accounts`，`PATCH /api/v1/money/settings`
+- 流水编辑：`PATCH /api/v1/financial/transactions/{id}/details` 保存指定的说明字段。`POST /api/v1/financial/transactions/{id}/correction` 校正资金。两个接口均要求 `Idempotency-Key`。
 - 资金：`POST /api/v1/money/income|expenses|transfers|adjustments|reconcile|top-ups|bonuses`。退款使用 `POST /api/v1/finance/refunds`。
 - 储值统计：`GET /api/v1/accounts/{id}/statistics`；账户列表可按 `account_class/merchant/active` 筛选。
 - 查询：`GET /api/v1/money/balance|transactions|summary`，支持 `period=today|week|month|year` 或 `from/to`。
 - 购入使用 `GET / POST /api/v1/acquisitions`。回填使用 `POST /api/v1/financial/transactions/{id}/acquisition`。
 - 耐用品：`GET /api/v1/durables`，`POST /api/v1/items/{id}/events/sale|maintenance|return`。移动与退休保留原入口。
 - 成本：`GET /api/v1/items/{id}/total-cost`
-- 导入：`GET /api/v1/statements/templates`；`POST /api/v1/statements/{provider}/preview|commit`；`GET /api/v1/statements/batches|summary`。
+- 导入：`POST /api/v1/statements/detect` 识别支付平台。`GET /api/v1/statements/{provider}/payment-accounts` 查询确认映射。`GET /api/v1/statements/templates`；`POST /api/v1/statements/{provider}/preview|commit`；`GET /api/v1/statements/batches|summary`。
 
 退款需关联原支出，金额不得超过剩余未退金额。实际退货由物品页单独登记。在 `/api/v1/links` 创建、查询和取消关联。收纳仍拥有数量 1，售出和退休终止生命周期，不能直接删除物品。
 

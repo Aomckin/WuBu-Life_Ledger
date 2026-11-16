@@ -101,9 +101,66 @@ func (s FinanceRepository) CommitStatement(ctx context.Context, key, code string
 			return fmt.Errorf("%w: 账簿或文件已变化，请重新预览", ledger.ErrConflict)
 		}
 		out, e = reconcileStatement(ctx, tx, code, p, parsed)
-		return e
+		if e != nil || !walletStatement(code) {
+			return e
+		}
+		return rememberStatementAccounts(ctx, tx, code, p, out.Rows)
 	})
 	return out, replay, e
+}
+
+func walletStatement(code string) bool {
+	template, ok := statement.Lookup(code)
+	return ok && template.Group == "payment"
+}
+
+func (s FinanceRepository) StatementPaymentAccounts(ctx context.Context, code string) (map[string]string, error) {
+	result := map[string]string{}
+	if !walletStatement(code) {
+		return result, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT m.payment_method,m.account_id FROM statement_payment_accounts m JOIN accounts a ON a.id=m.account_id WHERE m.provider_code=? AND a.active=1`, code)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var method, id string
+		if err = rows.Scan(&method, &id); err != nil {
+			return nil, err
+		}
+		result[method] = id
+	}
+	return result, rows.Err()
+}
+
+func rememberStatementAccounts(ctx context.Context, tx *sql.Tx, code string, p ledger.StatementInput, rows []ledger.StatementRowResult) error {
+	methods := map[string]bool{}
+	for _, row := range rows {
+		method := row.PaymentMethod
+		if method == "" || methods[method] {
+			continue
+		}
+		methods[method] = true
+		account, explicit := p.PaymentAccounts[method]
+		if !explicit {
+			account = p.AccountID
+		}
+		if account == "" {
+			if explicit {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM statement_payment_accounts WHERE provider_code=? AND payment_method=?`, code, method); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO statement_payment_accounts(provider_code,payment_method,account_id)
+			SELECT ?,?,id FROM accounts WHERE id=? AND id!='unknown' AND active=1
+			ON CONFLICT(provider_code,payment_method) DO UPDATE SET account_id=excluded.account_id`, code, method, account); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func reconcileStatement(ctx context.Context, tx *sql.Tx, code string, p ledger.StatementInput, rows []statement.Row) (ledger.StatementResult, error) {
@@ -147,7 +204,9 @@ func reconcileStatement(ctx context.Context, tx *sql.Tx, code string, p ledger.S
 		// A refund may reuse the original provider order number. Only an exact,
 		// unique source identity authorizes linking it without a manual review.
 		if input.Direction == "REFUND" && input.ReviewReason == "退款需核对原支出" && input.ExternalID != "" && input.AccountID != "" && input.Amount != nil && input.Currency == "CNY" {
-			matches, e := tx.QueryContext(ctx, `SELECT DISTINCT m.id FROM money_transactions m JOIN financial_event_links l ON l.transaction_id=m.id JOIN raw_financial_events r ON r.id=l.raw_event_id WHERE m.type='EXPENSE' AND m.voided_at='' AND m.account_id=? AND json_extract(r.payload,'$.provider')=? AND COALESCE(json_extract(r.payload,'$.provider_code'),'') IN (?,'') AND json_extract(r.payload,'$.external_id')=?`, input.AccountID, input.Provider, input.ProviderCode, input.ExternalID)
+			matches, e := tx.QueryContext(ctx, `SELECT DISTINCT m.id FROM money_transactions m JOIN financial_event_links l ON l.transaction_id=m.id JOIN raw_financial_events r ON r.id=l.raw_event_id
+				WHERE m.type='EXPENSE' AND m.voided_at='' AND (m.account_id=? OR json_extract(r.payload,'$.account_id')=?)
+				AND json_extract(r.payload,'$.provider')=? AND COALESCE(json_extract(r.payload,'$.provider_code'),'') IN (?,'') AND json_extract(r.payload,'$.external_id')=?`, input.AccountID, input.AccountID, input.Provider, input.ProviderCode, input.ExternalID)
 			if e != nil {
 				return out, e
 			}
@@ -201,7 +260,7 @@ func reconcileStatement(ctx context.Context, tx *sql.Tx, code string, p ledger.S
 				return out, e
 			}
 			result.AccountID = account
-			accountMismatch = input.AccountID != "" && input.AccountID != account
+			accountMismatch = input.AccountID != "" && input.AccountID != account && input.AccountID != event.AccountID
 		}
 		switch {
 		case accountMismatch:

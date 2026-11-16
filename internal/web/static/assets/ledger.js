@@ -29,22 +29,30 @@ function purchaseTable(data){return table(['时间 / 商家','商品','历史付
 }));}
 function maintenanceTable(data){return table(['时间','物品','维护','费用'],data.map(m=>[esc(when(m.occurred_at)),itemButton(m.item_id),`${esc(m.title)}<br><span class="ledger-caption">${esc(typeLabel(m.status))} · ${esc(m.description)}</span>`,(m.cost?money(m.cost):'—')+` <button data-domain-link="MAINTENANCE" data-link-source="${esc(m.id)}">关联资金流水</button>`]));}
 function eventTable(data){return table(['时间','物品','事件','数量变化','备注'],data.map(e=>[esc(when(e.occurred_at)),esc(itemName(e.item_id)),esc(typeLabel(e.type)),`${esc(e.quantity_before)} → ${esc(e.quantity_after)} (${e.quantity_delta>0?'+':''}${esc(e.quantity_delta)})`,esc(e.note)]));}
-async function summary(){const [d,r]=await Promise.all([api(`/ledger/summary?month=${$('#month').value}`),api('/runway')]);$('#metrics').innerHTML=[['自由资金',money(r.liquid_balance)],['未来已预留',money(r.reserved_outflow)],['安全可花',money(r.safe_to_spend)],['安全缓冲',money(r.safety_buffer)],[r.mode==='NEXT_INCOME'?'距离下一收入':'固定规划窗口',`${r.days_to_next_income??r.runway_horizon_days} 天`],['安全日均',money(r.safe_daily_spend)],['消费储值',money(d.consumption_balance)]].map(([k,v])=>`<div class="ledger-metric"><small>${esc(k)}</small><strong>${esc(v)}</strong></div>`).join('')+(r.cashflow_warning?'<p class="ledger-warning">现金流不足：已知义务与缓冲超过自由资金。</p>':'');return d;}
+async function summary(){const [d,r]=await Promise.all([api(`/ledger/summary?month=${$('#month').value}`),api('/runway')]);const metrics=[['自由资金',money(r.liquid_balance)],['未来已预留',money(r.reserved_outflow)],['安全可花',money(r.safe_to_spend)],['安全缓冲',money(r.safety_buffer)],[r.mode==='NEXT_INCOME'?'距离下一收入':'固定规划窗口',`${r.days_to_next_income??r.runway_horizon_days} 天`],['安全日均',money(r.safe_daily_spend)],['消费储值',money(d.consumption_balance)]].map(([k,v])=>`<div class="ledger-metric"><small>${esc(k)}</small><strong>${esc(v)}</strong></div>`).join('')+(r.cashflow_warning?'<p class="ledger-warning">现金流不足：已知义务与缓冲超过自由资金。</p>':'');return {d,metrics};}
 async function load(){
  const token=++generation;$('#content').setAttribute('aria-busy','true');
  try{
   let html='',count=0;
   const params=`${dateRange()}&limit=${PAGE}&offset=${offset}`;
-  $('#metrics').hidden=view!=='home';
   if(view==='home'){
-   const d=await summary();
+   const {d,metrics}=await summary();
    const list=await api('/items?limit=500');itemsByID=new Map(list.items.map(i=>[i.id,i]));
-   await refreshAccounts();html=await runwayPanel()+await supplyPanel()+`<div class="ledger-card-grid">${accountGroups(d.accounts,null,new Map(),true)}</div>`+panel('最近资金流水',cashTable(d.recent_transactions))+panel('最近购买',purchaseTable(d.recent_purchases))+`<div class="ledger-card-grid">${panel('近期消耗',eventTable(d.recent_consumption))}${panel('最近维护',maintenanceTable(d.recent_maintenance))}</div>`;
+   await refreshAccounts();
+   const recentIDs=[...new Set([...d.recent_purchases.flatMap(p=>p.items.map(i=>i.item_id)),...d.recent_consumption.map(e=>e.item_id)])];
+   const frequent=recentIDs.map(id=>itemsByID.get(id)).filter(Boolean).slice(0,8);
+   html='<div class="ledger-card-grid">'+accountGroups(d.accounts,null,new Map(),true)+'</div>'+
+    panel('常用物品',table(['物品','库存'],frequent.map(i=>[itemButton(i.id),esc(i.quantity)+' '+esc(WubuZh.unit(i.unit))])))+
+    '<details class="ledger-panel" id="home-planning" '+($('#home-planning')?.open?'open':'')+'><summary>资金规划与补给</summary><section id="metrics" class="metrics" aria-label="本月概览">'+metrics+'</section>'+
+    await runwayPanel()+await supplyPanel()+'</details>'+
+    '<details class="ledger-panel"><summary>最近活动</summary>'+panel('最近资金流水',cashTable(d.recent_transactions))+
+    panel('最近购买',purchaseTable(d.recent_purchases))+'<div class="ledger-card-grid">'+panel('近期消耗',eventTable(d.recent_consumption))+
+    panel('最近维护',maintenanceTable(d.recent_maintenance))+'</div></details>';
   }else if(view==='living'){html=await livingPanel();
   }else if(view==='inventory'||view==='items'){
    const list=await api(`/items?search=${encodeURIComponent(search)}&limit=${PAGE}&offset=${offset}${view==='inventory'?'&hide_out=true':''}`);list.items.forEach(i=>itemsByID.set(i.id,i));count=list.items.length;
    html=`<form id="search-form" class="ledger-search"><input name="search" value="${esc(search)}" placeholder="名称、别名、备注" aria-label="搜索物品"><button class="button" type="submit">搜索</button></form>`+panel(view==='inventory'?'当前库存':'全部物品',table(['物品','类型 / 位置','剩余','单价','操作'],list.items.map(i=>[itemButton(i.id),`${esc(typeLabel(i.item_type))}<br>${esc(WubuZh.location(i.location))}`,`${esc(i.quantity)} ${esc(WubuZh.unit(i.unit))}${i.item_type==='CONSUMABLE'?`<br><button data-forecast-id="${esc(i.id)}">消耗预测</button>`:''}`,i.unit_price_cents===null?'—':money(i.unit_price_cents/100),`<div class="ledger-actions">${(i.item_type==='DURABLE'?['maintenance','return','alias']:['consume','return','adjust','open','finish','discard','alias']).map(a=>`<button data-action="${a}" data-id="${esc(i.id)}">${({consume:'消耗',return:'退货',adjust:'纠正',open:'开封',finish:'用完',discard:'弃置',alias:'别名',maintenance:'维护',status:'状态'})[a]}</button>`).join('')}</div>`])));
-  }else if(['accounts','transactions','durables','import'].includes(view)){
+  }else if(['accounts','transactions','durables'].includes(view)){
    const result=await renderV02(view,params);html=result.html;count=result.count;
   }else{
    let data;
@@ -55,25 +63,38 @@ async function load(){
    count=data.items.length;
   }
   if(token!==generation)return;
-  $('#content').innerHTML=html;$('#paging').hidden=['home','living','accounts','import'].includes(view);$('#previous').disabled=offset===0;$('#next').disabled=count<PAGE;$('#page-label').textContent=`第 ${Math.floor(offset/PAGE)+1} 页`;
+  $('#content').innerHTML=html;$('#paging').hidden=['home','living','accounts'].includes(view);$('#previous').disabled=offset===0;$('#next').disabled=count<PAGE;$('#page-label').textContent=`第 ${Math.floor(offset/PAGE)+1} 页`;
  }catch(e){notify(WubuZh.error(e),true);}finally{if(token===generation)$('#content').removeAttribute('aria-busy');}
 }
 function purchaseLine(line=null){
  const el=document.createElement('div');el.className='line';el.originalLine=line;
- el.innerHTML='<label>商品名称<input name="name" maxlength="80" placeholder="例如：无糖可乐" required></label><label>包装规格<input name="spec" maxlength="100" placeholder="例如：2L"></label><label>数量<input name="quantity" type="number" min="0.001" step="0.001" value="1" required></label><label>单位<input name="unit" list="purchase-units" maxlength="20" value="个" placeholder="瓶、罐、升、个…" required></label><label>位置（选填）<input name="location" maxlength="100"></label><label>类型<select name="item_type"><option value="CONSUMABLE">消耗品</option><option value="DURABLE">耐用品</option><option value="UNTRACKED">不跟库存</option></select></label><button type="button" class="button" data-remove-line aria-label="删除商品行">×</button>';
+ el.innerHTML='<label>物品名称<input name="name" maxlength="80" placeholder="例如：无糖可乐" required></label>'+
+  '<label>数量<input name="quantity" value="1" placeholder="例如：2 瓶" maxlength="35" required></label>'+
+  '<label>规格（可选）<input name="spec" maxlength="100" placeholder="例如：2L"></label>'+
+  '<details class="purchase-line-options"><summary>更多选项</summary><div class="form-grid">'+
+  '<label>单位<input name="unit" list="purchase-units" maxlength="20" placeholder="沿用现有单位，默认个"></label>'+
+  '<label>位置<input name="location" maxlength="100"></label><label>类型<select name="item_type"><option value="CONSUMABLE">消耗品</option><option value="DURABLE">耐用品</option><option value="UNTRACKED">不跟库存</option></select></label>'+
+  '<button type="button" class="button" data-remove-line>删除此行</button></div></details>';
  if(line){['name','spec','quantity','location','item_type'].forEach(name=>el.querySelector(`[name="${name}"]`).value=line[name]??'');WubuZh.setEditable(el.querySelector('[name="unit"]'),line.unit,'unit');el.querySelector('[name="item_type"]').disabled=true;}
  $('#purchase-lines').append(el);
 }
 function purchaseLinesPayload(){
  return [...document.querySelectorAll('#purchase-lines .line')].map(line=>{
-  const values=Object.fromEntries([...line.querySelectorAll('input,select')].map(input=>[input.name,input.name==='quantity'?Number(input.value):input.value]));
+  const values=Object.fromEntries([...line.querySelectorAll('input,select')].map(input=>[input.name,input.value]));
   if(line.originalLine)values.unit=WubuZh.originalValue(line.querySelector('[name="unit"]'));
+  const match=values.quantity.trim().match(/^(\d+(?:\.\d{1,3})?)\s*([^\d\s]{1,20})?$/u);
+  if(!match||Number(match[1])<=0)throw new Error('请输入正数数量，例如 2 或 2 瓶。');
+  values.quantity=Number(match[1]);
+  if(match[2]){
+   if(values.unit&&WubuZh.unit(values.unit)!==WubuZh.unit(match[2]))throw new Error('数量中的单位与更多选项中的单位不同。');
+   values.unit=match[2];
+  }
   const original={...(line.originalLine||{})};delete original.package_size;delete original.package_unit;delete original.inventory_after;delete original.quantity_added;delete original.unit_price;delete original.subtotal;delete original.confidence;return {...original,...values};
  });
 }
 async function openPurchaseForm(purchase=null,transaction=null){
- const form=$('#purchase-form');form.reset();editingPurchase=purchase;backfillTransaction=transaction?.backfill;purchaseRetry=null;
- $('#purchase-title').textContent=purchase?'修改购买记录':transaction?'从流水后补购入':'记录购买';$('#save-purchase').textContent=purchase?'保存修改':'保存整笔购买';
+ const form=$('#purchase-form');form.reset();$('#purchase-options').open=false;editingPurchase=purchase;backfillTransaction=transaction?.backfill;purchaseRetry=null;
+ $('#purchase-title').textContent=purchase?'修改购买记录':transaction?'从流水后补购入':'记录购买';$('#save-purchase').textContent=purchase?'保存修改':'保存购入';
  $('#purchase-lines').replaceChildren();$('#purchase-error').textContent='';
  if(purchase){
   ['merchant','note'].forEach(name=>form.elements[name].value=purchase[name]??'');
@@ -104,10 +125,10 @@ $('#purchase-lines').addEventListener('click',e=>{if(e.target.closest('[data-rem
 $('#purchase-form').addEventListener('submit',async e=>{
  e.preventDefault();const form=e.currentTarget,values=new FormData(form);
  const originalTime=editingPurchase?new Date(new Date(editingPurchase.purchased_at).getTime()+8*3600000).toISOString().slice(0,16):null;
- const body={merchant:values.get('merchant'),occurred_at:editingPurchase&&values.get('purchased_at')===originalTime?editingPurchase.purchased_at:new Date(values.get('purchased_at')+'+08:00').toISOString(),source:editingPurchase?.source||'manual',external_id:editingPurchase?.external_id||'',note:values.get('note'),items:purchaseLinesPayload()};
+ const body={merchant:values.get('merchant'),occurred_at:editingPurchase&&values.get('purchased_at')===originalTime?editingPurchase.purchased_at:new Date(values.get('purchased_at')+'+08:00').toISOString(),source:editingPurchase?.source||'manual',external_id:editingPurchase?.external_id||'',note:values.get('note')};
  if(editingPurchase)body.expected_updated_at=editingPurchase.updated_at;
  const path=editingPurchase?'/acquisitions/'+editingPurchase.id:backfillTransaction?'/financial/transactions/'+encodeURIComponent(backfillTransaction)+'/acquisition':'/acquisitions',button=$('#save-purchase');button.disabled=true;
- try{if(!body.items.length)throw new Error('请至少添加一个商品。');purchaseRetry=retryFor(purchaseRetry,body,path);await api(path,body,purchaseRetry.key,editingPurchase?'PUT':'POST');$('#purchase-dialog').close();notify(editingPurchase?'已更新购入及库存。':'已记录购入。');editingPurchase=null;await load();}
+ try{body.items=purchaseLinesPayload();if(!body.items.length)throw new Error('请至少添加一个商品。');purchaseRetry=retryFor(purchaseRetry,body,path);await api(path,body,purchaseRetry.key,editingPurchase?'PUT':'POST');$('#purchase-dialog').close();notify(editingPurchase?'已更新购入及库存。':'已记录购入。');editingPurchase=null;await load();}
  catch(err){$('#purchase-error').textContent=WubuZh.error(err);}finally{button.disabled=false;}
 });
 function inputField(label,name,type='text',value='',extra=''){return `<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;}

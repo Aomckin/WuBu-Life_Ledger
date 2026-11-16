@@ -258,7 +258,7 @@ func (s FinanceRepository) SetMoneySettings(ctx context.Context, key string, p l
 // postMoney records before/after and updates the balance within the caller's reality event transaction.
 func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput, delta ledger.SignedMoney) (ledger.MoneyTransaction, error) {
 	var out ledger.MoneyTransaction
-	if !validNature(p.ExpenseNature) {
+	if !validNature(p.ExpenseNature) || !validFinancialTags(p.Tags) || (len(p.Tags) > 0 && kind != "EXPENSE" && kind != "INCOME") {
 		return out, ledger.ErrInvalid
 	}
 	if p.Amount < 0 || p.Amount > 1e12 || len(p.Category) > 100 || len([]rune(p.Merchant)) > 200 || len(p.ExternalID) > 200 || len([]rune(p.Note)) > 2000 || len([]rune(p.Reason)) > 2000 {
@@ -308,6 +308,16 @@ func postMoney(ctx context.Context, tx *sql.Tx, kind string, p ledger.MoneyInput
 	_, e = tx.ExecContext(ctx, `UPDATE accounts SET balance_cents=?,updated_at=? WHERE id=?`, out.BalanceAfter, now, a.ID)
 	if e != nil {
 		return out, e
+	}
+	if len(p.Tags) > 0 {
+		annotation := ledger.TransactionAnnotation{Tags: p.Tags, Note: out.Note, Confidence: 1, AnnotatedBy: source, AnnotationStatus: "CONFIRMED"}
+		payload, e := json.Marshal(annotation)
+		if e != nil {
+			return out, e
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO transaction_annotations VALUES(?,?,?)`, out.ID, string(payload), now); e != nil {
+			return out, e
+		}
 	}
 	e = compensateCheckpoint(ctx, tx, out)
 	return out, e

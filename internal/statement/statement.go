@@ -60,6 +60,29 @@ func Lookup(code string) (Template, bool) {
 	return Template{}, false
 }
 
+// DetectPayment recognizes wallet exports using the same native headers as Parse.
+// Bank headers can overlap, so the caller must choose a bank template.
+func DetectPayment(filename string, data []byte) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if len(data) == 0 || len(data) > MaxFileBytes {
+		return "", ledger.ErrInvalid
+	}
+	for _, t := range Templates[:2] {
+		for _, supported := range t.Extensions {
+			if ext != supported {
+				continue
+			}
+			rows, err := readRecords(t.ID, ext, data)
+			if err == nil {
+				if _, _, err = dataStart(t.ID, rows); err == nil {
+					return t.ID, nil
+				}
+			}
+		}
+	}
+	return "", nil
+}
+
 type Row struct {
 	Number    int       `json:"row"`
 	Values    []string  `json:"values"`
